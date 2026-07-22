@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vive Telecom — Gestión de Clientes y Red</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="root"></div>
+
+  <!-- React sin proceso de build -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- htm: permite escribir sintaxis tipo JSX con template literals, sin compilador -->
+  <script src="https://unpkg.com/htm@3.1.1/dist/htm.js"></script>
+
+  <!-- Firebase (SDK compat, sin build) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+  <script src="./firebase-config.js"></script>
+  <script src="./app.js"></script>
+  <script src="./modulo-ips.js"></script>
+  <script src="./modulo-alta-servicio.js"></script>
+  <script src="./modulo-pagos.js"></script>
+  <script src="./modulo-routers.js"></script>
+  <script src="./modulo-clientes.js"></script>
+</body>
+</html>
