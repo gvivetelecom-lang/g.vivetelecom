@@ -134,62 +134,15 @@ function PantallaLogin() {
 }
 
 // ---------------------------------------------------------------------
-// Indicadores del panel principal — sección 9 de los lineamientos
+// Indicadores del panel principal — el hook con datos reales vive en
+// modulo-dashboard.js; acá queda solo la tarjeta, que se reutiliza ahí.
 // ---------------------------------------------------------------------
-
-function useIndicadores() {
-  // TODO: reemplazar por una lectura real (ej. un documento
-  // resumen/indicadores mantenido por el servidor interno, para no
-  // tener que contar miles de documentos desde el navegador cada vez
-  // que se abre el dashboard).
-  const [datos] = useState({
-    clientesTotal: null,
-    clientesActivos: null,
-    clientesSuspendidos: null,
-    pendientesInstalacion: null,
-    cuentasVencidas: null,
-    montoPendiente: null,
-    routersOperativos: null,
-    routersSinRespuesta: null,
-    ordenesPendientes: null,
-  });
-  return datos;
-}
 
 function TarjetaIndicador({ valor, etiqueta, onClick }) {
   return html`
     <div class="indicador ${onClick ? 'clicable' : ''}" onClick=${onClick}>
       <div class="valor">${valor ?? '—'}</div>
       <div class="etiqueta">${etiqueta}</div>
-    </div>
-  `;
-}
-
-function PanelPrincipal({ navegarA }) {
-  const ind = useIndicadores();
-
-  return html`
-    <div>
-      <h1 style=${{ fontSize: 'var(--texto-titulo-principal)', margin: '0 0 20px' }}>Panel principal</h1>
-
-      <div class="grid-indicadores">
-        <${TarjetaIndicador} valor=${ind.clientesTotal} etiqueta="Total de clientes" onClick=${() => navegarA('clientes')} />
-        <${TarjetaIndicador} valor=${ind.clientesActivos} etiqueta="Clientes activos" onClick=${() => navegarA('clientes')} />
-        <${TarjetaIndicador} valor=${ind.clientesSuspendidos} etiqueta="Clientes suspendidos" onClick=${() => navegarA('clientes')} />
-        <${TarjetaIndicador} valor=${ind.pendientesInstalacion} etiqueta="Pendientes de instalación" onClick=${() => navegarA('clientes')} />
-      </div>
-
-      <div class="grid-indicadores">
-        <${TarjetaIndicador} valor=${ind.cuentasVencidas} etiqueta="Cuentas vencidas" onClick=${() => navegarA('cuentas')} />
-        <${TarjetaIndicador} valor=${ind.montoPendiente} etiqueta="Monto pendiente de cobro" onClick=${() => navegarA('cuentas')} />
-        <${TarjetaIndicador} valor=${ind.routersOperativos} etiqueta="Routers operativos" onClick=${() => navegarA('routers')} />
-        <${TarjetaIndicador} valor=${ind.routersSinRespuesta} etiqueta="Routers sin respuesta" onClick=${() => navegarA('routers')} />
-      </div>
-
-      <div class="card">
-        <div class="card-titulo">Actividad reciente</div>
-        <p class="texto-secundario">Este panel se conecta a Firestore en el siguiente paso — por ahora es el esqueleto visual.</p>
-      </div>
     </div>
   `;
 }
@@ -258,7 +211,7 @@ function AppShell({ usuario, rol }) {
 
       <main class="main-content">
         ${ruta === 'inicio'
-          ? html`<${PanelPrincipal} navegarA=${setRuta} />`
+          ? html`<${PanelPrincipalReal} navegarA=${setRuta} />`
           : ruta === 'clientes'
           ? html`<${ModuloClientes} usuarioId=${usuario.uid} />`
           : ruta === 'ips'
