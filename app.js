@@ -4,6 +4,14 @@
 const html = htm.bind(React.createElement);
 const { useState, useEffect, useMemo } = React;
 
+// Estilos compartidos por las tablas de todos los módulos (Clientes,
+// IPs, Pagos). Se declaran una sola vez acá porque app.js siempre
+// carga primero — declararlos también en cada módulo rompe la carga,
+// ya que los scripts clásicos comparten un mismo scope global y
+// `const` no admite redeclaración.
+const estiloTh = { padding: '10px 16px', fontSize: 'var(--texto-etiqueta)', color: 'var(--color-texto-secundario)', textTransform: 'uppercase', letterSpacing: '0.03em' };
+const estiloTd = { padding: '12px 16px', fontSize: 'var(--texto-normal)' };
+
 // ---------------------------------------------------------------------
 // Menú lateral — sección 6 de los lineamientos de interfaz
 // ---------------------------------------------------------------------

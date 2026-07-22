@@ -261,5 +261,4 @@ function TablaCuentasCliente({ clienteId, usuarioId }) {
   `;
 }
 
-const estiloTh = { padding: '10px 16px', fontSize: 'var(--texto-etiqueta)', color: 'var(--color-texto-secundario)', textTransform: 'uppercase', letterSpacing: '0.03em' };
-const estiloTd = { padding: '12px 16px', fontSize: 'var(--texto-normal)' };
+// estiloTh y estiloTd ya están declarados en app.js (compartidos entre módulos)
