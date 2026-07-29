@@ -104,6 +104,7 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
   const [editando, setEditando] = useState(null);
   const [form, setForm] = useState({ perfilPPP: '', velocidadBajada: '', velocidadSubida: '', pool: '' });
   const [guardando, setGuardando] = useState(false);
+  const [avisoEnviado, setAvisoEnviado] = useState(null);
 
   useEffect(() => {
     const unsub = db.collection('routers').onSnapshot((snap) => setRouters(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
@@ -128,6 +129,7 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
       pool: actual?.pool ?? '',
     });
     setEditando(routerId);
+    setAvisoEnviado(null);
   };
 
   const guardar = async (routerId) => {
@@ -141,7 +143,30 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
         queueTipo: null,
         burst: null,
       });
+
+      // Dispara la creación/actualización real del perfil PPP en el
+      // router — no hace falta crearlo a mano en Winbox.
+      await db.collection('ordenes_mikrotik').add({
+        tipo: 'CREAR_PERFIL_PPP',
+        servicioId: null,
+        clienteId: null,
+        routerId,
+        parametros: {
+          perfilPPP: form.perfilPPP.trim(),
+          velocidadBajada: Number(form.velocidadBajada) || null,
+          velocidadSubida: Number(form.velocidadSubida) || null,
+        },
+        estado: 'pendiente',
+        pasosCompletados: [],
+        usuarioSolicitante: usuarioId,
+        fechaSolicitud: firebase.firestore.FieldValue.serverTimestamp(),
+        fechaEjecucion: null,
+        resultado: null,
+        error: null,
+      });
+
       setEditando(null);
+      setAvisoEnviado(routerId);
     } catch (err) {
       console.error(err);
     } finally {
@@ -190,6 +215,11 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
                       <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => abrirEdicion(r.id)}>
                         ${cfg ? 'Editar' : 'Configurar'}
                       </button>
+                      ${avisoEnviado === r.id && html`
+                        <div class="texto-secundario" style=${{ color: 'var(--estado-activo)', marginTop: '4px' }}>
+                          <i class="fa-solid fa-paper-plane"></i> Orden enviada al agente
+                        </div>
+                      `}
                     </td>
                   `}
             </tr>

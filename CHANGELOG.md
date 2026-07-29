@@ -2,6 +2,13 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.13 — El perfil PPP se crea solo en el router, sin tocar Winbox
+- **`agenteMikrotik.js`** (servidor interno): nuevo tipo de orden `CREAR_PERFIL_PPP` — crea el perfil PPP en el router si no existe, o le actualiza la velocidad si ya estaba, con el rate-limit calculado a partir de las velocidades cargadas en el plan.
+- **`firestore.rules`** (servidor interno): se agrega `CREAR_PERFIL_PPP` a la lista de tipos de orden permitidos.
+- **`modulo-planes.js`** (repo público): al guardar la configuración de un plan para un router, además de guardar el documento en Firestore, se envía automáticamente la orden al agente. La fila muestra "Orden enviada al agente" como confirmación.
+- **⚠️ Este ZIP toca los dos lados otra vez.** Actualizá `firestore.rules` en el servidor interno y corré `firebase deploy --only firestore:rules`, y reiniciá el proceso `agenteMikrotik` (Ctrl+C y volver a correrlo) para que tome el nuevo handler.
+- Nota sobre `rate-limit`: se arma como `subida/bajada` en Mbps (ej. `50M/50M`), que es el orden que espera RouterOS. Si necesitás asimetría real entre subida y bajada, ya están los dos campos separados en el formulario del plan.
+
 ## v1.12 — Selector de IP: búsqueda y "cargar más" en vez de un desplegable fijo a 50
 - `modulo-ips.js`: `SelectorIP` deja de ser un `<select>` nativo (tope de 50, sin forma de buscar) y pasa a ser un buscador propio: escribís parte de la IP y filtra contra Firestore por prefijo sin traer todo el bloque, y un botón "Cargar más" permite seguir recorriendo la lista completa página por página.
 - **Nota de orden conocida, no corregida todavía:** las IPs se ordenan alfabéticamente como texto (por eso `.100` aparece antes que `.11`), porque el ID del documento es la IP en formato de texto plano. Corregirlo de raíz implicaría cambiar el esquema de ID de documento en toda la colección `ip_direcciones` (usado también por la reserva transaccional y el agente) — lo dejamos pendiente como mejora futura, no bloquea el uso normal ya que ahora se puede buscar directamente.
