@@ -2,6 +2,11 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.5 — Módulo de Auditoría + número de versión visible
+- `modulo-auditoria.js` (nuevo): historial de cambios con filtro por entidad y vista expandible de diferencias (antes/después) por registro. Va a estar vacío hasta que `auditoriaWriter.js` esté corriendo en el servidor interno — no es un error.
+- `app.js`: se agrega `VERSION_SISTEMA`, visible al pie del menú lateral y en la pantalla de login. Se actualiza en cada entrega junto con este changelog.
+- Nota: filtrar auditoría por entidad va a pedir crear un índice compuesto la primera vez (normal, un clic desde el link del error).
+
 ## v1.4 — Módulo de Usuarios y Permisos
 - `modulo-usuarios.js` (nuevo): alta de usuarios (crea el login en Firebase Auth + el documento en Firestore sin perder la sesión del administrador, usando una app secundaria de Firebase descartable), cambio de rol, activar/desactivar. Solo visible para el rol `superadmin`.
 - Recordatorio incluido en la propia pantalla: un usuario recién creado o con el rol recién cambiado no ve reflejado el cambio hasta que `roleSync.js` (servidor interno) lo sincronice y el usuario reingrese sesión.

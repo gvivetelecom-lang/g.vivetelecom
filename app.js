@@ -4,6 +4,10 @@
 const html = htm.bind(React.createElement);
 const { useState, useEffect, useMemo } = React;
 
+// Versión del sistema — se actualiza en cada entrega, coincide con el
+// CHANGELOG.md del repositorio.
+const VERSION_SISTEMA = 'v1.5';
+
 // Estilos compartidos por las tablas de todos los módulos (Clientes,
 // IPs, Pagos). Se declaran una sola vez acá porque app.js siempre
 // carga primero — declararlos también en cada módulo rompe la carga,
@@ -100,7 +104,7 @@ function PantallaLogin() {
     <div class="login-pantalla">
       <div class="login-card">
         <div class="marca">VIVE TELECOM</div>
-        <div class="subtitulo">Gestión de clientes, servicios y red</div>
+        <div class="subtitulo">Gestión de clientes, servicios y red · ${VERSION_SISTEMA}</div>
 
         ${error && html`<div class="login-error">${error}</div>`}
 
@@ -211,6 +215,10 @@ function AppShell({ usuario, rol }) {
             </a>
           `
         )}
+
+        <div class="texto-secundario" style=${{ padding: '16px 20px 4px', fontSize: 'var(--texto-ayuda)', opacity: 0.6 }}>
+          Vive Telecom — ${VERSION_SISTEMA}
+        </div>
       </aside>
 
       <header class="topbar">
@@ -253,6 +261,8 @@ function AppShell({ usuario, rol }) {
           ? html`<${ModuloAlertas} navegarA=${setRuta} />`
           : ruta === 'usuarios'
           ? html`<${ModuloUsuarios} usuarioActualUid=${usuario.uid} />`
+          : ruta === 'auditoria'
+          ? html`<${ModuloAuditoria} />`
           : html`<${PantallaEnConstruccion} titulo=${itemActivo?.label ?? ruta} />`}
       </main>
     </div>
