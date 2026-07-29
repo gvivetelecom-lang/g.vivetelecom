@@ -2,6 +2,11 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.11 — Corrección importante: la interfaz se colgaba al usar el alta de servicio
+- **Causa:** `.count()` (agregación de Firestore) se estaba llamando de forma directa dentro de una cadena `.then()`, sin estar envuelto en una función `async`. Cuando esa llamada falla en el entorno del usuario, JavaScript la tira como una excepción sincrónica dentro de un `useEffect` — y como no hay un límite (Error Boundary) que la contenga, React deja de renderizar toda la pantalla.
+- **Corrección:** se agrega `contarDocumentos()` en `app.js`, una función compartida que envuelve el conteo en una función `async` (cualquier falla se vuelve una promesa rechazada, nunca una excepción no controlada) y hace *fallback* a un conteo manual si la agregación no está disponible. Se reemplazan todos los usos directos de `.count()` en `app.js`, `modulo-dashboard.js` y `modulo-ips.js`.
+- Si en la consola del navegador seguís viendo `[failed-precondition]: The query requires an index`, eso es un aviso aparte y normal — hacé clic en el link que trae el error una sola vez para crear el índice.
+
 ## v1.10 — Corrección: mensaje engañoso en el selector de IP
 - `modulo-ips.js`: el selector de IP del alta de servicio mostraba "50 IP disponibles" cuando en realidad esa era solo la cantidad que trae la consulta (limitada a 50 a propósito, para no listar cientos en un desplegable). Ahora consulta el total real por separado y aclara "Mostrando las primeras 50 de 254 IP disponibles" cuando corresponde.
 

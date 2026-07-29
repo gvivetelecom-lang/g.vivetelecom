@@ -31,34 +31,26 @@ function useIndicadoresReales() {
         ordenesPendientes,
         cuentasConSaldo,
       ] = await Promise.all([
-        db.collection('clientes').count().get(),
-        db.collection('clientes').where('estadoComercial', '==', 'activo').count().get(),
-        db.collection('clientes').where('estadoComercial', '==', 'suspendido').count().get(),
-        db.collection('clientes').where('estadoComercial', '==', 'pendiente').count().get(),
-        db.collection('cuentas').where('estado', '==', 'vencida').count().get(),
-        db.collection('routers').where('estado', '==', 'operativo').count().get(),
-        db.collection('routers').where('estado', '==', 'sin_respuesta').count().get(),
-        db.collection('ordenes_mikrotik').where('estado', '==', 'pendiente').count().get(),
-        // El monto pendiente se suma del lado del cliente porque la
-        // agregación sum() sobre un campo todavía no está disponible
-        // en todas las versiones del SDK compat. Con un límite de 500
-        // alcanza sobradamente para el volumen de un ISP regional; si
-        // se supera, conviene mover este cálculo al servidor interno.
+        contarDocumentos(db.collection('clientes')),
+        contarDocumentos(db.collection('clientes').where('estadoComercial', '==', 'activo')),
+        contarDocumentos(db.collection('clientes').where('estadoComercial', '==', 'suspendido')),
+        contarDocumentos(db.collection('clientes').where('estadoComercial', '==', 'pendiente')),
+        contarDocumentos(db.collection('cuentas').where('estado', '==', 'vencida')),
+        contarDocumentos(db.collection('routers').where('estado', '==', 'operativo')),
+        contarDocumentos(db.collection('routers').where('estado', '==', 'sin_respuesta')),
+        contarDocumentos(db.collection('ordenes_mikrotik').where('estado', '==', 'pendiente')),
+        // El monto pendiente se suma del lado del cliente porque no es
+        // un conteo simple, sino una suma de campo (no cubierta por
+        // contarDocumentos). Con un límite de 500 alcanza sobradamente
+        // para el volumen de un ISP regional.
         db.collection('cuentas').where('estado', 'in', ['pendiente', 'parcial', 'vencida']).limit(500).get(),
       ]);
 
       const montoPendiente = cuentasConSaldo.docs.reduce((sum, d) => sum + (d.data().saldo || 0), 0);
 
       setDatos({
-        clientesTotal: clientesTotal.data().count,
-        clientesActivos: clientesActivos.data().count,
-        clientesSuspendidos: clientesSuspendidos.data().count,
-        pendientesInstalacion: pendientesInstalacion.data().count,
-        cuentasVencidas: cuentasVencidas.data().count,
-        montoPendiente,
-        routersOperativos: routersOperativos.data().count,
-        routersSinRespuesta: routersSinRespuesta.data().count,
-        ordenesPendientes: ordenesPendientes.data().count,
+        clientesTotal, clientesActivos, clientesSuspendidos, pendientesInstalacion,
+        cuentasVencidas, montoPendiente, routersOperativos, routersSinRespuesta, ordenesPendientes,
       });
       setUltimaActualizacion(new Date());
     } catch (err) {

@@ -6,7 +6,27 @@ const { useState, useEffect, useMemo } = React;
 
 // Versión del sistema — se actualiza en cada entrega, coincide con el
 // CHANGELOG.md del repositorio.
-const VERSION_SISTEMA = 'v1.10';
+const VERSION_SISTEMA = 'v1.11';
+
+// Cuenta documentos de una consulta de forma segura. Usa la
+// agregación count() del servidor cuando está disponible (más rápida
+// y barata), y si no —por ejemplo si el SDK cargado no la expone—
+// hace un fallback a traer los documentos y contar el tamaño. Al ser
+// una función `async`, cualquier excepción (incluso sincrónica, como
+// "count is not a function") se convierte en una promesa rechazada en
+// vez de un error no controlado que puede tirar abajo la interfaz.
+async function contarDocumentos(query) {
+  try {
+    if (typeof query.count === 'function') {
+      const snap = await query.count().get();
+      return snap.data().count;
+    }
+  } catch (err) {
+    console.warn('count() no disponible, usando fallback:', err.message);
+  }
+  const snap = await query.get();
+  return snap.size;
+}
 
 // Estilos compartidos por las tablas de todos los módulos (Clientes,
 // IPs, Pagos). Se declaran una sola vez acá porque app.js siempre
@@ -171,13 +191,10 @@ function useIndicadoresTopbar() {
     const cargar = async () => {
       try {
         const [operativos, sinRespuesta] = await Promise.all([
-          db.collection('routers').where('estado', '==', 'operativo').count().get(),
-          db.collection('routers').where('estado', '==', 'sin_respuesta').count().get(),
+          contarDocumentos(db.collection('routers').where('estado', '==', 'operativo')),
+          contarDocumentos(db.collection('routers').where('estado', '==', 'sin_respuesta')),
         ]);
-        setDatos({
-          routersOperativos: operativos.data().count,
-          routersSinRespuesta: sinRespuesta.data().count,
-        });
+        setDatos({ routersOperativos: operativos, routersSinRespuesta: sinRespuesta });
       } catch (err) {
         console.error(err);
       }

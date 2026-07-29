@@ -62,13 +62,12 @@ function SelectorIP({ routerId, onSeleccionar }) {
 
     // El conteo real (para mostrar en el mensaje) es una consulta
     // aparte y liviana — no listamos las 254 en el desplegable, serían
-    // inmanejables para elegir a mano.
-    db.collection('ip_direcciones')
-      .where('routerId', '==', routerId)
-      .where('estado', '==', 'disponible')
-      .count().get()
-      .then((snap) => setTotalDisponibles(snap.data().count))
-      .catch((err) => console.error(err));
+    // inmanejables para elegir a mano. contarDocumentos() nunca lanza
+    // una excepción sincrónica, así que un fallo acá no puede colgar
+    // el resto de la pantalla.
+    contarDocumentos(
+      db.collection('ip_direcciones').where('routerId', '==', routerId).where('estado', '==', 'disponible')
+    ).then(setTotalDisponibles).catch((err) => console.error(err));
 
     const unsub = db.collection('ip_direcciones')
       .where('routerId', '==', routerId)
