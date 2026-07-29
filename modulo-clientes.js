@@ -59,7 +59,11 @@ function useClientes({ estadoFiltro, busqueda }) {
         setCargando(false);
       },
       (err) => {
-        setError('No fue posible cargar la lista de clientes.');
+        setError(
+          err.code === 'permission-denied'
+            ? 'Sin permisos para leer clientes: tu usuario no tiene un rol asignado todavía (revisá roleSync.js) o cerrá y volvé a iniciar sesión.'
+            : 'No fue posible cargar la lista de clientes.'
+        );
         setCargando(false);
         console.error(err);
       }
@@ -75,19 +79,150 @@ function useClientes({ estadoFiltro, busqueda }) {
 // Tabla de clientes
 // ---------------------------------------------------------------------
 
-function TablaClientes({ onSeleccionar }) {
+function FormularioAltaCliente({ usuarioId, onCompletado, onCancelar }) {
+  const [form, setForm] = useState({
+    codigo: `CLI-${Date.now().toString().slice(-6)}`,
+    nombre: '', documento: '', ruc: '', tipoCliente: 'residencial',
+    telefono: '', email: '', direccion: '', ciudad: '', zona: '',
+  });
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+
+  const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
+
+  const confirmar = async (e) => {
+    e.preventDefault();
+    if (!form.nombre.trim() || !form.documento.trim()) {
+      setError('Nombre y documento son obligatorios.');
+      return;
+    }
+
+    setEnviando(true);
+    setError(null);
+    try {
+      await db.collection('clientes').add({
+        ...form,
+        ruc: form.ruc || null,
+        email: form.email || null,
+        coordenadas: null,
+        estadoComercial: 'pendiente',
+        ejecutivoResponsable: usuarioId,
+        fechaAlta: firebase.firestore.FieldValue.serverTimestamp(),
+        fechaBaja: null,
+        motivoBaja: null,
+        observaciones: '',
+        ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
+      });
+      onCompletado();
+    } catch (err) {
+      setError(
+        err.code === 'permission-denied'
+          ? 'Tu usuario no tiene permiso para crear clientes (revisá que tenga un rol asignado — ver roleSync.js).'
+          : 'No fue posible crear el cliente. Intente nuevamente.'
+      );
+      console.error(err);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return html`
+    <div class="card" style=${{ maxWidth: '620px', marginBottom: '16px' }}>
+      <div class="card-titulo">Nuevo cliente</div>
+
+      ${error && html`<div class="login-error">${error}</div>`}
+
+      <form onSubmit=${confirmar}>
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Código</label>
+            <input type="text" value=${form.codigo} onInput=${set('codigo')} class="mono" />
+          </div>
+          <div class="campo" style=${{ flex: '2 1 260px' }}>
+            <label>Nombre completo</label>
+            <input type="text" value=${form.nombre} onInput=${set('nombre')} required />
+          </div>
+        </div>
+
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Documento</label>
+            <input type="text" value=${form.documento} onInput=${set('documento')} required />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>RUC (opcional)</label>
+            <input type="text" value=${form.ruc} onInput=${set('ruc')} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Tipo de cliente</label>
+            <select value=${form.tipoCliente} onChange=${set('tipoCliente')}>
+              <option value="residencial">Residencial</option>
+              <option value="corporativo">Corporativo</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Teléfono</label>
+            <input type="tel" value=${form.telefono} onInput=${set('telefono')} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 200px' }}>
+            <label>Correo (opcional)</label>
+            <input type="email" value=${form.email} onInput=${set('email')} />
+          </div>
+        </div>
+
+        <div class="campo">
+          <label>Dirección</label>
+          <input type="text" value=${form.direccion} onInput=${set('direccion')} />
+        </div>
+
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Ciudad</label>
+            <input type="text" value=${form.ciudad} onInput=${set('ciudad')} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Zona</label>
+            <input type="text" value=${form.zona} onInput=${set('zona')} />
+          </div>
+        </div>
+
+        <div class="flex justify-between">
+          <button type="button" class="btn btn-secundario" onClick=${onCancelar} disabled=${enviando}>Cancelar</button>
+          <button type="submit" class="btn btn-principal" disabled=${enviando}>
+            ${enviando ? 'Creando…' : 'Crear cliente'}
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+function TablaClientes({ onSeleccionar, usuarioId }) {
   const [estadoFiltro, setEstadoFiltro] = useState('todos');
   const [busqueda, setBusqueda] = useState('');
+  const [mostrarAlta, setMostrarAlta] = useState(false);
   const { clientes, cargando, error } = useClientes({ estadoFiltro, busqueda });
 
   return html`
     <div>
       <div class="flex items-center justify-between gap-16" style=${{ marginBottom: '16px' }}>
         <h1 style=${{ fontSize: 'var(--texto-titulo-principal)', margin: 0 }}>Clientes</h1>
-        <button class="btn btn-principal">
+        <button class="btn btn-principal" onClick=${() => setMostrarAlta(true)}>
           <i class="fa-solid fa-plus"></i> Crear cliente
         </button>
       </div>
+
+      ${mostrarAlta && html`
+        <${FormularioAltaCliente}
+          usuarioId=${usuarioId}
+          onCancelar=${() => setMostrarAlta(false)}
+          onCompletado=${() => setMostrarAlta(false)}
+        />
+      `}
 
       <div class="card" style=${{ marginBottom: '16px' }}>
         <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
@@ -315,5 +450,5 @@ function ModuloClientes({ usuarioId }) {
     return html`<${FichaCliente} clienteId=${clienteSeleccionado} volver=${() => setClienteSeleccionado(null)} usuarioId=${usuarioId} />`;
   }
 
-  return html`<${TablaClientes} onSeleccionar=${setClienteSeleccionado} />`;
+  return html`<${TablaClientes} onSeleccionar=${setClienteSeleccionado} usuarioId=${usuarioId} />`;
 }
