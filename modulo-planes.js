@@ -200,18 +200,134 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
   `;
 }
 
+function FormularioEdicionPlan({ plan, usuarioId, onCompletado, onCancelar }) {
+  const [form, setForm] = useState({
+    nombre: plan.nombre, precio: plan.precio, moneda: plan.moneda,
+    segmento: plan.segmento, estado: plan.estado,
+    impuestos: plan.impuestos ?? 0, descuentosPermitidos: plan.descuentosPermitidos ?? true,
+  });
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+
+  const set = (campo) => (e) => {
+    const valor = e.target.type === 'checkbox' ? e.target.checked : e.target.value;
+    setForm((f) => ({ ...f, [campo]: valor }));
+  };
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    if (!form.nombre.trim() || !form.precio) {
+      setError('Nombre y precio son obligatorios.');
+      return;
+    }
+    setEnviando(true);
+    setError(null);
+    try {
+      await db.collection('planes').doc(plan.id).update({
+        nombre: form.nombre.trim(),
+        precio: Number(form.precio),
+        moneda: form.moneda,
+        segmento: form.segmento,
+        estado: form.estado,
+        impuestos: Number(form.impuestos) || 0,
+        descuentosPermitidos: form.descuentosPermitidos,
+        ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
+      });
+      onCompletado();
+    } catch (err) {
+      setError(
+        err.code === 'permission-denied'
+          ? 'Tu rol no tiene permiso para editar este campo del plan (admin_red solo puede cambiar el estado).'
+          : 'No fue posible guardar los cambios.'
+      );
+      console.error(err);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return html`
+    <div style=${{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-borde)' }}>
+      ${error && html`<div class="login-error">${error}</div>`}
+      <form onSubmit=${guardar}>
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '2 1 200px' }}>
+            <label>Nombre</label>
+            <input type="text" value=${form.nombre} onInput=${set('nombre')} required />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 120px' }}>
+            <label>Precio</label>
+            <input type="number" value=${form.precio} onInput=${set('precio')} required />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 100px' }}>
+            <label>Moneda</label>
+            <select value=${form.moneda} onChange=${set('moneda')}>
+              <option value="PYG">PYG</option>
+              <option value="USD">USD</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Segmento</label>
+            <select value=${form.segmento} onChange=${set('segmento')}>
+              <option value="residencial">Residencial</option>
+              <option value="corporativo">Corporativo</option>
+            </select>
+          </div>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Estado</label>
+            <select value=${form.estado} onChange=${set('estado')}>
+              <option value="activo">Activo</option>
+              <option value="inactivo">Inactivo</option>
+            </select>
+          </div>
+          <div class="campo" style=${{ flex: '1 1 120px' }}>
+            <label>Impuestos (%)</label>
+            <input type="number" value=${form.impuestos} onInput=${set('impuestos')} />
+          </div>
+        </div>
+        <div class="campo">
+          <label class="flex items-center gap-8" style=${{ fontWeight: 400 }}>
+            <input type="checkbox" checked=${form.descuentosPermitidos} onChange=${set('descuentosPermitidos')} style=${{ width: 'auto' }} />
+            Permite descuentos manuales
+          </label>
+        </div>
+        <div class="flex justify-between">
+          <button type="button" class="btn btn-secundario" onClick=${onCancelar} disabled=${enviando}>Cancelar</button>
+          <button type="submit" class="btn btn-principal" disabled=${enviando}>${enviando ? 'Guardando…' : 'Guardar cambios'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
 function TarjetaPlan({ plan, usuarioId }) {
   const [expandido, setExpandido] = useState(false);
+  const [editando, setEditando] = useState(false);
 
   return html`
     <div class="card">
-      <div class="flex items-center justify-between" style=${{ cursor: 'pointer' }} onClick=${() => setExpandido(!expandido)}>
-        <div>
-          <div style=${{ fontWeight: 600 }}>${plan.nombre}</div>
+      <div class="flex items-center justify-between">
+        <div style=${{ cursor: 'pointer', flex: 1 }} onClick=${() => setExpandido(!expandido)}>
+          <div class="flex items-center gap-8">
+            <span style=${{ fontWeight: 600 }}>${plan.nombre}</span>
+            ${plan.estado === 'inactivo' && html`<span class="etiqueta-estado etiqueta-inactivo">Inactivo</span>`}
+          </div>
           <div class="texto-secundario">${plan.precio} ${plan.moneda} · ${plan.segmento}</div>
         </div>
-        <i class="fa-solid ${expandido ? 'fa-chevron-up' : 'fa-chevron-down'} texto-secundario"></i>
+        <div class="flex gap-8 items-center">
+          <button class="btn btn-secundario" style=${{ padding: '6px 12px' }} onClick=${() => { setEditando(!editando); setExpandido(false); }}>
+            ${editando ? 'Cerrar edición' : 'Editar'}
+          </button>
+          <i class="fa-solid ${expandido ? 'fa-chevron-up' : 'fa-chevron-down'} texto-secundario" style=${{ cursor: 'pointer' }} onClick=${() => setExpandido(!expandido)}></i>
+        </div>
       </div>
+
+      ${editando && html`
+        <${FormularioEdicionPlan} plan=${plan} usuarioId=${usuarioId} onCancelar=${() => setEditando(false)} onCompletado=${() => setEditando(false)} />
+      `}
+
       ${expandido && html`
         <div style=${{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid var(--color-borde)' }}>
           <div class="texto-secundario" style=${{ marginBottom: '8px' }}>Configuración técnica por router</div>

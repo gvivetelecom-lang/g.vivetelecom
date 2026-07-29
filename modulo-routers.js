@@ -49,7 +49,95 @@ function useRoutersConMetricas() {
   return { routers, cargando };
 }
 
-function TarjetaRouter({ router }) {
+function FormularioEdicionRouter({ router, usuarioId, onCompletado, onCancelar }) {
+  const [form, setForm] = useState({
+    nombre: router.nombre, modelo: router.modelo ?? '', numeroSerie: router.numeroSerie ?? '',
+    routerOS: router.routerOS ?? '', funcion: router.funcion, sitio: router.sitio ?? '',
+    ciudad: router.ciudad ?? '', zona: router.zona ?? '', ipGestion: router.ipGestion,
+    puertoApi: router.puertoApi, tipoConexion: router.tipoConexion, estado: router.estado,
+  });
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+
+  const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    setEnviando(true);
+    setError(null);
+    try {
+      await db.collection('routers').doc(router.id).update({
+        ...form,
+        puertoApi: Number(form.puertoApi) || 8729,
+        ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
+      });
+      onCompletado();
+    } catch (err) {
+      setError(err.code === 'permission-denied' ? 'Sin permiso para editar routers.' : 'No fue posible guardar los cambios.');
+      console.error(err);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return html`
+    <div style=${{ marginTop: '12px', paddingTop: '12px', borderTop: '1px solid var(--color-borde)' }}>
+      ${error && html`<div class="login-error">${error}</div>`}
+      <form onSubmit=${guardar}>
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '2 1 200px' }}>
+            <label>Nombre</label>
+            <input type="text" value=${form.nombre} onInput=${set('nombre')} required />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 140px' }}>
+            <label>Estado</label>
+            <select value=${form.estado} onChange=${set('estado')}>
+              <option value="operativo">Operativo</option>
+              <option value="alerta">Con alerta</option>
+              <option value="sin_respuesta">Sin respuesta</option>
+              <option value="mantenimiento">En mantenimiento</option>
+              <option value="deshabilitado">Deshabilitado</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Modelo</label>
+            <input type="text" value=${form.modelo} onInput=${set('modelo')} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 140px' }}>
+            <label>RouterOS</label>
+            <input type="text" value=${form.routerOS} onInput=${set('routerOS')} />
+          </div>
+        </div>
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>IP de gestión</label>
+            <input type="text" value=${form.ipGestion} onInput=${set('ipGestion')} class="mono" required />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 100px' }}>
+            <label>Puerto API</label>
+            <input type="number" value=${form.puertoApi} onInput=${set('puertoApi')} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 140px' }}>
+            <label>Conexión</label>
+            <select value=${form.tipoConexion} onChange=${set('tipoConexion')}>
+              <option value="api-ssl">API-SSL</option>
+              <option value="api">API</option>
+            </select>
+          </div>
+        </div>
+        <div class="flex justify-between">
+          <button type="button" class="btn btn-secundario" onClick=${onCancelar} disabled=${enviando}>Cancelar</button>
+          <button type="submit" class="btn btn-principal" disabled=${enviando}>${enviando ? 'Guardando…' : 'Guardar cambios'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
+function TarjetaRouter({ router, usuarioId }) {
+  const [editando, setEditando] = useState(false);
   const m = router.metricas;
   return html`
     <div class="card">
@@ -58,20 +146,29 @@ function TarjetaRouter({ router }) {
           <div style=${{ fontWeight: 600, fontSize: 'var(--texto-subtitulo)' }}>${router.nombre}</div>
           <div class="texto-secundario mono">${router.codigo} · ${router.modelo}</div>
         </div>
-        <${EtiquetaEstadoRouter} estado=${router.estado} />
+        <div class="flex gap-8 items-center">
+          <${EtiquetaEstadoRouter} estado=${router.estado} />
+          <button class="btn btn-secundario" style=${{ padding: '6px 12px' }} onClick=${() => setEditando(!editando)}>
+            ${editando ? 'Cerrar' : 'Editar'}
+          </button>
+        </div>
       </div>
 
-      <div class="flex gap-16" style=${{ flexWrap: 'wrap', fontSize: 'var(--texto-secundario)' }}>
-        <${MetricaMini} etiqueta="Uptime" valor=${m ? formatoUptime(m.uptime) : '—'} />
-        <${MetricaMini} etiqueta="CPU" valor=${m ? `${m.cpu}%` : '—'} alerta=${m?.cpu > 85} />
-        <${MetricaMini} etiqueta="Memoria" valor=${m ? `${m.memoria}%` : '—'} alerta=${m?.memoria > 85} />
-        <${MetricaMini} etiqueta="Sesiones" valor=${m?.sesionesActivas ?? '—'} />
-        <${MetricaMini} etiqueta="Latencia" valor=${m ? `${m.latencia} ms` : '—'} />
-      </div>
+      ${editando
+        ? html`<${FormularioEdicionRouter} router=${router} usuarioId=${usuarioId} onCancelar=${() => setEditando(false)} onCompletado=${() => setEditando(false)} />`
+        : html`
+            <div class="flex gap-16" style=${{ flexWrap: 'wrap', fontSize: 'var(--texto-secundario)' }}>
+              <${MetricaMini} etiqueta="Uptime" valor=${m ? formatoUptime(m.uptime) : '—'} />
+              <${MetricaMini} etiqueta="CPU" valor=${m ? `${m.cpu}%` : '—'} alerta=${m?.cpu > 85} />
+              <${MetricaMini} etiqueta="Memoria" valor=${m ? `${m.memoria}%` : '—'} alerta=${m?.memoria > 85} />
+              <${MetricaMini} etiqueta="Sesiones" valor=${m?.sesionesActivas ?? '—'} />
+              <${MetricaMini} etiqueta="Latencia" valor=${m ? `${m.latencia} ms` : '—'} />
+            </div>
 
-      <div class="texto-secundario" style=${{ marginTop: '10px' }}>
-        Última respuesta: ${m?.ultimaConsulta ? new Date(m.ultimaConsulta.seconds * 1000).toLocaleString('es-PY') : 'sin datos aún'}
-      </div>
+            <div class="texto-secundario" style=${{ marginTop: '10px' }}>
+              Última respuesta: ${m?.ultimaConsulta ? new Date(m.ultimaConsulta.seconds * 1000).toLocaleString('es-PY') : 'sin datos aún'}
+            </div>
+          `}
     </div>
   `;
 }
@@ -250,7 +347,7 @@ function ModuloRouters({ usuarioId }) {
         ? html`<p class="texto-secundario">Cargando infraestructura…</p>`
         : routers.length === 0
         ? html`<div class="card"><p class="texto-secundario">Todavía no hay routers cargados.</p></div>`
-        : html`<div class="flex-col gap-16">${routers.map((r) => html`<${TarjetaRouter} key=${r.id} router=${r} />`)}</div>`}
+        : html`<div class="flex-col gap-16">${routers.map((r) => html`<${TarjetaRouter} key=${r.id} router=${r} usuarioId=${usuarioId} />`)}</div>`}
     </div>
   `;
 }

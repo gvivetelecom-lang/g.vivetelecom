@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.9 — Corrección: faltaba editar Planes y Routers
+- `modulo-planes.js`: se agrega "Editar" en cada plan (nombre, precio, moneda, segmento, estado, impuestos, descuentos permitidos). Antes solo se podía crear y configurar por router, no modificar los datos base.
+- `modulo-routers.js`: se agrega "Editar" en cada router (mismo patrón). El campo "Código" no es editable a propósito, porque es el ID del documento y tiene que seguir coincidiendo con `routersCredentials.json`.
+
 ## v1.8 — Corrección importante: faltaban las pantallas de carga de datos base
 Se detectó que Routers, Planes y Direcciones IP solo tenían vistas de consulta, sin forma de cargar datos desde la web — y Servicios no tenía pantalla propia. Sin esto, no había manera de probar el alta de un cliente de punta a punta. Se completan las cuatro:
 
