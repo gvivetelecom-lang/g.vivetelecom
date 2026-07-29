@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.14 — Corrección: errores silenciosos al configurar un plan por router
+- `modulo-planes.js`: `ConfiguracionPorRouter` fallaba en silencio si el guardado o el envío de la orden al agente daban error — solo quedaba registrado en la consola del navegador, la pantalla no mostraba nada y el formulario se quedaba abierto sin explicación. Ahora muestra el error real (incluyendo el caso típico de `firestore.rules` desactualizado en el servidor).
+- **Recordatorio:** si en la v1.13 todavía no corriste `firebase deploy --only firestore:rules`, hacelo ahora — es la causa más probable de que "Guardar" se quedara colgado sin avisar.
+
 ## v1.13 — El perfil PPP se crea solo en el router, sin tocar Winbox
 - **`agenteMikrotik.js`** (servidor interno): nuevo tipo de orden `CREAR_PERFIL_PPP` — crea el perfil PPP en el router si no existe, o le actualiza la velocidad si ya estaba, con el rate-limit calculado a partir de las velocidades cargadas en el plan.
 - **`firestore.rules`** (servidor interno): se agrega `CREAR_PERFIL_PPP` a la lista de tipos de orden permitidos.

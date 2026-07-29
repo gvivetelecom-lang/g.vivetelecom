@@ -105,6 +105,7 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
   const [form, setForm] = useState({ perfilPPP: '', velocidadBajada: '', velocidadSubida: '', pool: '' });
   const [guardando, setGuardando] = useState(false);
   const [avisoEnviado, setAvisoEnviado] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const unsub = db.collection('routers').onSnapshot((snap) => setRouters(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
@@ -130,10 +131,12 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
     });
     setEditando(routerId);
     setAvisoEnviado(null);
+    setError(null);
   };
 
   const guardar = async (routerId) => {
     setGuardando(true);
+    setError(null);
     try {
       await db.collection('planes').doc(planId).collection('configuracionPorRouter').doc(routerId).set({
         perfilPPP: form.perfilPPP.trim(),
@@ -168,6 +171,11 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
       setEditando(null);
       setAvisoEnviado(routerId);
     } catch (err) {
+      setError(
+        err.code === 'permission-denied'
+          ? 'Sin permiso para guardar (revisá que firestore.rules esté actualizado en el servidor y desplegado).'
+          : 'No fue posible guardar. Revisá la consola del navegador para más detalle.'
+      );
       console.error(err);
     } finally {
       setGuardando(false);
@@ -196,16 +204,26 @@ function ConfiguracionPorRouter({ planId, usuarioId }) {
               <td style=${{ padding: '8px' }}>${r.nombre}</td>
               ${editando === r.id
                 ? html`
-                    <td style=${{ padding: '8px' }}><input type="text" value=${form.perfilPPP} onInput=${(e) => setForm((f) => ({ ...f, perfilPPP: e.target.value }))} placeholder="ej: perfil-300M" /></td>
-                    <td style=${{ padding: '8px' }}>
-                      <div class="flex gap-8">
-                        <input type="number" value=${form.velocidadBajada} onInput=${(e) => setForm((f) => ({ ...f, velocidadBajada: e.target.value }))} placeholder="Mbps ↓" style=${{ width: '80px' }} />
-                        <input type="number" value=${form.velocidadSubida} onInput=${(e) => setForm((f) => ({ ...f, velocidadSubida: e.target.value }))} placeholder="Mbps ↑" style=${{ width: '80px' }} />
+                    <td colspan="3" style=${{ padding: '8px' }}>
+                      ${error && html`<div class="login-error" style=${{ margin: '0 0 8px' }}>${error}</div>`}
+                      <div class="flex gap-8" style=${{ alignItems: 'flex-end' }}>
+                        <div>
+                          <label style=${{ fontSize: 'var(--texto-etiqueta)' }}>Perfil PPP</label>
+                          <input type="text" value=${form.perfilPPP} onInput=${(e) => setForm((f) => ({ ...f, perfilPPP: e.target.value }))} placeholder="ej: perfil-300M" />
+                        </div>
+                        <div class="flex gap-8">
+                          <div>
+                            <label style=${{ fontSize: 'var(--texto-etiqueta)' }}>Bajada</label>
+                            <input type="number" value=${form.velocidadBajada} onInput=${(e) => setForm((f) => ({ ...f, velocidadBajada: e.target.value }))} placeholder="Mbps ↓" style=${{ width: '80px' }} />
+                          </div>
+                          <div>
+                            <label style=${{ fontSize: 'var(--texto-etiqueta)' }}>Subida</label>
+                            <input type="number" value=${form.velocidadSubida} onInput=${(e) => setForm((f) => ({ ...f, velocidadSubida: e.target.value }))} placeholder="Mbps ↑" style=${{ width: '80px' }} />
+                          </div>
+                        </div>
+                        <button class="btn btn-positivo" style=${{ padding: '4px 10px' }} onClick=${() => guardar(r.id)} disabled=${guardando}>${guardando ? 'Guardando…' : 'Guardar'}</button>
+                        <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setEditando(null)} disabled=${guardando}>Cancelar</button>
                       </div>
-                    </td>
-                    <td style=${{ padding: '8px' }}>
-                      <button class="btn btn-positivo" style=${{ padding: '4px 10px' }} onClick=${() => guardar(r.id)} disabled=${guardando}>Guardar</button>
-                      <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setEditando(null)}>Cancelar</button>
                     </td>
                   `
                 : html`
