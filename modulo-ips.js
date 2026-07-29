@@ -53,11 +53,22 @@ async function reservarIP(ip, { servicioId, clienteId, usuarioId }) {
 
 function SelectorIP({ routerId, onSeleccionar }) {
   const [disponibles, setDisponibles] = useState([]);
+  const [totalDisponibles, setTotalDisponibles] = useState(null);
   const [cargando, setCargando] = useState(true);
 
   useEffect(() => {
-    if (!routerId) { setDisponibles([]); return; }
+    if (!routerId) { setDisponibles([]); setTotalDisponibles(null); return; }
     setCargando(true);
+
+    // El conteo real (para mostrar en el mensaje) es una consulta
+    // aparte y liviana — no listamos las 254 en el desplegable, serían
+    // inmanejables para elegir a mano.
+    db.collection('ip_direcciones')
+      .where('routerId', '==', routerId)
+      .where('estado', '==', 'disponible')
+      .count().get()
+      .then((snap) => setTotalDisponibles(snap.data().count))
+      .catch((err) => console.error(err));
 
     const unsub = db.collection('ip_direcciones')
       .where('routerId', '==', routerId)
@@ -95,7 +106,11 @@ function SelectorIP({ routerId, onSeleccionar }) {
         <option value="">Seleccionar…</option>
         ${disponibles.map((ip) => html`<option key=${ip} value=${ip} class="mono">${ip}</option>`)}
       </select>
-      <div class="ayuda">${disponibles.length} IP disponibles en este router.</div>
+      <div class="ayuda">
+        ${totalDisponibles != null && totalDisponibles > disponibles.length
+          ? `Mostrando las primeras ${disponibles.length} de ${totalDisponibles} IP disponibles en este router.`
+          : `${totalDisponibles ?? disponibles.length} IP disponibles en este router.`}
+      </div>
     </div>
   `;
 }

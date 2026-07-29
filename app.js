@@ -6,7 +6,7 @@ const { useState, useEffect, useMemo } = React;
 
 // Versión del sistema — se actualiza en cada entrega, coincide con el
 // CHANGELOG.md del repositorio.
-const VERSION_SISTEMA = 'v1.9';
+const VERSION_SISTEMA = 'v1.10';
 
 // Estilos compartidos por las tablas de todos los módulos (Clientes,
 // IPs, Pagos). Se declaran una sola vez acá porque app.js siempre

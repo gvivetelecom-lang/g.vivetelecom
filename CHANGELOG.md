@@ -2,6 +2,9 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.10 — Corrección: mensaje engañoso en el selector de IP
+- `modulo-ips.js`: el selector de IP del alta de servicio mostraba "50 IP disponibles" cuando en realidad esa era solo la cantidad que trae la consulta (limitada a 50 a propósito, para no listar cientos en un desplegable). Ahora consulta el total real por separado y aclara "Mostrando las primeras 50 de 254 IP disponibles" cuando corresponde.
+
 ## v1.9 — Corrección: faltaba editar Planes y Routers
 - `modulo-planes.js`: se agrega "Editar" en cada plan (nombre, precio, moneda, segmento, estado, impuestos, descuentos permitidos). Antes solo se podía crear y configurar por router, no modificar los datos base.
 - `modulo-routers.js`: se agrega "Editar" en cada router (mismo patrón). El campo "Código" no es editable a propósito, porque es el ID del documento y tiene que seguir coincidiendo con `routersCredentials.json`.
