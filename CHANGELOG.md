@@ -2,6 +2,20 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.8 — Corrección importante: faltaban las pantallas de carga de datos base
+Se detectó que Routers, Planes y Direcciones IP solo tenían vistas de consulta, sin forma de cargar datos desde la web — y Servicios no tenía pantalla propia. Sin esto, no había manera de probar el alta de un cliente de punta a punta. Se completan las cuatro:
+
+- `modulo-routers.js`: se agrega "Nuevo router" (formulario completo). El campo "Código" tiene que coincidir con la clave usada en `routersCredentials.json` del servidor interno.
+- `modulo-planes.js` (nuevo): alta de planes + configuración técnica por router (perfil PPP, velocidades) directamente desde la web — antes esto solo estaba documentado, no tenía pantalla.
+- `modulo-ips.js`: se agrega "Cargar bloque" — convierte un CIDR (ej. `10.20.30.0/24`) en las direcciones IP individuales, con previsualización antes de confirmar y barra de progreso durante la carga.
+- `modulo-servicios.js` (nuevo): vista global de todos los servicios con filtros por estado/router, que lleva a la ficha del cliente dueño al hacer clic. El alta en sí se sigue haciendo desde la ficha del cliente (eso ya funcionaba).
+- `app.js`: se conectan las rutas `servicios` y `planes`, y se agrega la navegación cruzada entre Servicios → ficha del cliente.
+
+## v1.7 — Módulo de Operaciones por lote
+- `modulo-lotes.js` (nuevo): permite suspender, rehabilitar o reasignar grupo de corte a varios clientes a la vez, con selección por checkbox y confirmación explícita antes de ejecutar. Genera una orden individual al agente por cada servicio afectado (no una orden "grupal").
+- **⚠️ Requiere actualizar `firestore.rules` también en el servidor interno** (no solo el repo público): se agregó el campo `grupoCorteId` a `servicios`, habilitado para `admin_red`/`operador`/`superadmin` y también para `comercial`. Sin este cambio, la reasignación de corte por lote va a fallar con `permission-denied` para el rol comercial.
+- Redeploy: `firebase deploy --only firestore:rules` desde la carpeta del servidor interno.
+
 ## v1.6 — Corrección: formulario de alta de cliente
 - `modulo-clientes.js`: el botón "Crear cliente" nunca tenía el formulario conectado (quedó pendiente sin terminar en una entrega anterior). Se agrega `FormularioAltaCliente` completo y se conecta el botón.
 - `modulo-clientes.js`: mensajes de error más claros cuando falla por falta de permisos (sugiere revisar `roleSync.js` / rol asignado) en vez de un genérico "no fue posible cargar".

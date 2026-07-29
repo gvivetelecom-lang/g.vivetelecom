@@ -443,8 +443,12 @@ function CampoInfo({ etiqueta, valor }) {
 // Contenedor del módulo: alterna entre tabla y ficha
 // ---------------------------------------------------------------------
 
-function ModuloClientes({ usuarioId }) {
-  const [clienteSeleccionado, setClienteSeleccionado] = useState(null);
+function ModuloClientes({ usuarioId, clienteInicial }) {
+  const [clienteSeleccionado, setClienteSeleccionado] = useState(clienteInicial ?? null);
+
+  useEffect(() => {
+    if (clienteInicial) setClienteSeleccionado(clienteInicial);
+  }, [clienteInicial]);
 
   if (clienteSeleccionado) {
     return html`<${FichaCliente} clienteId=${clienteSeleccionado} volver=${() => setClienteSeleccionado(null)} usuarioId=${usuarioId} />`;

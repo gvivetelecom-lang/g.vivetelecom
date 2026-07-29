@@ -6,7 +6,7 @@ const { useState, useEffect, useMemo } = React;
 
 // Versión del sistema — se actualiza en cada entrega, coincide con el
 // CHANGELOG.md del repositorio.
-const VERSION_SISTEMA = 'v1.6';
+const VERSION_SISTEMA = 'v1.8';
 
 // Estilos compartidos por las tablas de todos los módulos (Clientes,
 // IPs, Pagos). Se declaran una sola vez acá porque app.js siempre
@@ -193,7 +193,13 @@ function useIndicadoresTopbar() {
 function AppShell({ usuario, rol }) {
   const [ruta, setRuta] = useState('inicio');
   const [sidebarAbierto, setSidebarAbierto] = useState(false);
+  const [clienteParaAbrir, setClienteParaAbrir] = useState(null);
   const { routersOperativos, routersSinRespuesta } = useIndicadoresTopbar();
+
+  const navegarACliente = (clienteId) => {
+    setClienteParaAbrir(clienteId);
+    setRuta('clientes');
+  };
 
   const itemActivo = useMemo(() => MENU.find((m) => m.id === ruta), [ruta]);
 
@@ -252,17 +258,23 @@ function AppShell({ usuario, rol }) {
         ${ruta === 'inicio'
           ? html`<${PanelPrincipalReal} navegarA=${setRuta} />`
           : ruta === 'clientes'
-          ? html`<${ModuloClientes} usuarioId=${usuario.uid} />`
+          ? html`<${ModuloClientes} usuarioId=${usuario.uid} clienteInicial=${clienteParaAbrir} />`
+          : ruta === 'servicios'
+          ? html`<${ModuloServicios} navegarACliente=${navegarACliente} />`
+          : ruta === 'planes'
+          ? html`<${ModuloPlanes} usuarioId=${usuario.uid} />`
           : ruta === 'ips'
-          ? html`<${ModuloIPs} />`
+          ? html`<${ModuloIPs} usuarioId=${usuario.uid} />`
           : ruta === 'routers'
-          ? html`<${ModuloRouters} />`
+          ? html`<${ModuloRouters} usuarioId=${usuario.uid} />`
           : ruta === 'alertas'
           ? html`<${ModuloAlertas} navegarA=${setRuta} />`
           : ruta === 'usuarios'
           ? html`<${ModuloUsuarios} usuarioActualUid=${usuario.uid} />`
           : ruta === 'auditoria'
           ? html`<${ModuloAuditoria} />`
+          : ruta === 'lotes'
+          ? html`<${ModuloLotes} usuarioId=${usuario.uid} />`
           : html`<${PantallaEnConstruccion} titulo=${itemActivo?.label ?? ruta} />`}
       </main>
     </div>

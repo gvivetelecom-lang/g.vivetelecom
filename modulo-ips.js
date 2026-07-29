@@ -151,8 +151,6 @@ function TablaIPs() {
 
   return html`
     <div>
-      <h1 style=${{ fontSize: 'var(--texto-titulo-principal)', margin: '0 0 16px' }}>Direcciones IP</h1>
-
       <div class="card" style=${{ marginBottom: '16px' }}>
         <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
           <div class="campo" style=${{ flex: '0 1 220px', marginBottom: 0 }}>
@@ -212,6 +210,194 @@ function TablaIPs() {
 
 // estiloTh y estiloTd ya están declarados en app.js (compartidos entre módulos)
 
-function ModuloIPs() {
-  return html`<${TablaIPs} />`;
+// ---------------------------------------------------------------------
+// Carga de bloque de IP — expande un CIDR a documentos individuales
+// en ip_direcciones (ver sección 6 del modelo de datos). El ID de
+// documento de destino ES la propia IP, lo que habilita la reserva
+// transaccional que ya usa reservarIP().
+// ---------------------------------------------------------------------
+
+function ipAEntero(ip) {
+  return ip.split('.').reduce((acc, octeto) => (acc << 8) + Number(octeto), 0) >>> 0;
+}
+
+function enteroAIP(entero) {
+  return [24, 16, 8, 0].map((despl) => (entero >>> despl) & 255).join('.');
+}
+
+function expandirCIDR(cidr) {
+  const [base, bitsStr] = cidr.split('/');
+  const prefijo = Number(bitsStr);
+  if (!base || Number.isNaN(prefijo) || prefijo < 0 || prefijo > 32) {
+    throw new Error('CIDR inválido. Formato esperado: 10.20.30.0/24');
+  }
+
+  const baseInt = ipAEntero(base);
+  const mascara = prefijo === 0 ? 0 : (0xFFFFFFFF << (32 - prefijo)) >>> 0;
+  const red = baseInt & mascara;
+  const tamano = 2 ** (32 - prefijo);
+  const broadcast = red + tamano - 1;
+
+  // Para /31 y /32 no hay red/broadcast que excluir (redes punto a
+  // punto o IPs individuales); para el resto se excluyen las dos.
+  const inicio = prefijo >= 31 ? red : red + 1;
+  const fin = prefijo >= 31 ? broadcast : broadcast - 1;
+
+  const ips = [];
+  for (let i = inicio; i <= fin; i++) ips.push(enteroAIP(i));
+  return ips;
+}
+
+function CargarBloqueIP({ usuarioId, onCompletado, onCancelar }) {
+  const [cidr, setCidr] = useState('');
+  const [routerId, setRouterId] = useState('');
+  const [pool, setPool] = useState('');
+  const [descripcion, setDescripcion] = useState('');
+  const [routers, setRouters] = useState([]);
+  const [previsualizacion, setPrevisualizacion] = useState(null);
+  const [progreso, setProgreso] = useState(null); // { hecho, total }
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const unsub = db.collection('routers').onSnapshot((snap) => setRouters(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    return unsub;
+  }, []);
+
+  const previsualizar = () => {
+    setError(null);
+    try {
+      const ips = expandirCIDR(cidr.trim());
+      setPrevisualizacion(ips);
+    } catch (err) {
+      setError(err.message);
+      setPrevisualizacion(null);
+    }
+  };
+
+  const confirmar = async () => {
+    if (!routerId) { setError('Seleccioná el router al que pertenece este bloque.'); return; }
+    if (!previsualizacion) { setError('Primero verificá el bloque con "Previsualizar".'); return; }
+
+    setError(null);
+    const ips = previsualizacion;
+    setProgreso({ hecho: 0, total: ips.length });
+
+    try {
+      const bloqueRef = await db.collection('ip_bloques').add({
+        cidr: cidr.trim(),
+        routerId,
+        pool: pool.trim() || null,
+        descripcion: descripcion.trim(),
+        ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
+      });
+
+      // 450 por batch para dejar margen bajo el límite de 500 de Firestore
+      for (let i = 0; i < ips.length; i += 450) {
+        const trozo = ips.slice(i, i + 450);
+        const batch = db.batch();
+        trozo.forEach((ip) => {
+          batch.set(db.collection('ip_direcciones').doc(ip), {
+            bloqueId: bloqueRef.id,
+            routerId,
+            pool: pool.trim() || null,
+            estado: 'disponible',
+            servicioId: null,
+            clienteId: null,
+            fechaAsignacion: null,
+            usuarioResponsable: null,
+          });
+        });
+        await batch.commit();
+        setProgreso({ hecho: Math.min(i + 450, ips.length), total: ips.length });
+      }
+
+      onCompletado();
+    } catch (err) {
+      setError(
+        err.code === 'permission-denied'
+          ? 'Sin permiso para cargar bloques de IP (se requiere admin_red o superadmin).'
+          : 'Ocurrió un error a mitad de la carga. Revisá cuántas IPs quedaron creadas antes de reintentar (para no duplicar).'
+      );
+      console.error(err);
+      setProgreso(null);
+    }
+  };
+
+  return html`
+    <div class="card" style=${{ maxWidth: '520px', marginBottom: '16px' }}>
+      <div class="card-titulo">Cargar bloque de IP</div>
+
+      ${error && html`<div class="login-error">${error}</div>`}
+
+      <div class="campo">
+        <label>Router</label>
+        <select value=${routerId} onChange=${(e) => setRouterId(e.target.value)}>
+          <option value="">Seleccionar…</option>
+          ${routers.map((r) => html`<option key=${r.id} value=${r.id}>${r.nombre}</option>`)}
+        </select>
+      </div>
+
+      <div class="campo">
+        <label>CIDR</label>
+        <input type="text" value=${cidr} onInput=${(e) => { setCidr(e.target.value); setPrevisualizacion(null); }} placeholder="10.20.30.0/24" class="mono" />
+        <div class="ayuda">Bloques típicos de ISP (/24 a /20). Evitá cargar de una algo mayor a /20 (más de 4.000 IPs) desde el navegador.</div>
+      </div>
+
+      <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+        <div class="campo" style=${{ flex: 1 }}>
+          <label>Pool (opcional)</label>
+          <input type="text" value=${pool} onInput=${(e) => setPool(e.target.value)} />
+        </div>
+        <div class="campo" style=${{ flex: 1 }}>
+          <label>Descripción</label>
+          <input type="text" value=${descripcion} onInput=${(e) => setDescripcion(e.target.value)} />
+        </div>
+      </div>
+
+      ${!previsualizacion
+        ? html`<button type="button" class="btn btn-secundario" onClick=${previsualizar}>Previsualizar</button>`
+        : html`
+            <div class="login-error" style=${{ background: 'rgba(37,99,235,0.06)', borderColor: 'rgba(37,99,235,0.25)', color: 'var(--estado-proceso)' }}>
+              Este bloque va a crear <strong>${previsualizacion.length}</strong> direcciones IP disponibles, desde ${previsualizacion[0]} hasta ${previsualizacion[previsualizacion.length - 1]}.
+            </div>
+          `}
+
+      ${progreso && html`
+        <div class="campo">
+          <div class="ayuda">Cargando ${progreso.hecho} / ${progreso.total}…</div>
+          <div style=${{ height: '6px', background: 'var(--color-borde)', borderRadius: '3px', overflow: 'hidden' }}>
+            <div style=${{ height: '100%', width: `${(progreso.hecho / progreso.total) * 100}%`, background: 'var(--color-naranja)' }}></div>
+          </div>
+        </div>
+      `}
+
+      <div class="flex justify-between" style=${{ marginTop: '12px' }}>
+        <button type="button" class="btn btn-secundario" onClick=${onCancelar} disabled=${!!progreso}>Cancelar</button>
+        <button type="button" class="btn btn-principal" onClick=${confirmar} disabled=${!previsualizacion || !!progreso}>
+          ${progreso ? 'Cargando…' : 'Confirmar y cargar'}
+        </button>
+      </div>
+    </div>
+  `;
+}
+
+function ModuloIPs({ usuarioId }) {
+  const [mostrarCarga, setMostrarCarga] = useState(false);
+
+  return html`
+    <div>
+      <div class="flex items-center justify-between" style=${{ marginBottom: '16px' }}>
+        <h1 style=${{ fontSize: 'var(--texto-titulo-principal)', margin: 0 }}>Direcciones IP</h1>
+        <button class="btn btn-principal" onClick=${() => setMostrarCarga(true)}>
+          <i class="fa-solid fa-plus"></i> Cargar bloque
+        </button>
+      </div>
+
+      ${mostrarCarga && html`
+        <${CargarBloqueIP} usuarioId=${usuarioId} onCancelar=${() => setMostrarCarga(false)} onCompletado=${() => setMostrarCarga(false)} />
+      `}
+
+      <${TablaIPs} />
+    </div>
+  `;
 }
