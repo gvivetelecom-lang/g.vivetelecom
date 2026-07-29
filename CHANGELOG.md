@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.12 — Selector de IP: búsqueda y "cargar más" en vez de un desplegable fijo a 50
+- `modulo-ips.js`: `SelectorIP` deja de ser un `<select>` nativo (tope de 50, sin forma de buscar) y pasa a ser un buscador propio: escribís parte de la IP y filtra contra Firestore por prefijo sin traer todo el bloque, y un botón "Cargar más" permite seguir recorriendo la lista completa página por página.
+- **Nota de orden conocida, no corregida todavía:** las IPs se ordenan alfabéticamente como texto (por eso `.100` aparece antes que `.11`), porque el ID del documento es la IP en formato de texto plano. Corregirlo de raíz implicaría cambiar el esquema de ID de documento en toda la colección `ip_direcciones` (usado también por la reserva transaccional y el agente) — lo dejamos pendiente como mejora futura, no bloquea el uso normal ya que ahora se puede buscar directamente.
+
 ## v1.11 — Corrección importante: la interfaz se colgaba al usar el alta de servicio
 - **Causa:** `.count()` (agregación de Firestore) se estaba llamando de forma directa dentro de una cadena `.then()`, sin estar envuelto en una función `async`. Cuando esa llamada falla en el entorno del usuario, JavaScript la tira como una excepción sincrónica dentro de un `useEffect` — y como no hay un límite (Error Boundary) que la contenga, React deja de renderizar toda la pantalla.
 - **Corrección:** se agrega `contarDocumentos()` en `app.js`, una función compartida que envuelve el conteo en una función `async` (cualquier falla se vuelve una promesa rechazada, nunca una excepción no controlada) y hace *fallback* a un conteo manual si la agregación no está disponible. Se reemplazan todos los usos directos de `.count()` en `app.js`, `modulo-dashboard.js` y `modulo-ips.js`.

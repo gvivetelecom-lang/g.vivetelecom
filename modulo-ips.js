@@ -55,32 +55,71 @@ function SelectorIP({ routerId, onSeleccionar }) {
   const [disponibles, setDisponibles] = useState([]);
   const [totalDisponibles, setTotalDisponibles] = useState(null);
   const [cargando, setCargando] = useState(true);
+  const [cargandoMas, setCargandoMas] = useState(false);
+  const [hayMas, setHayMas] = useState(false);
+  const [busqueda, setBusqueda] = useState('');
+  const [seleccionada, setSeleccionada] = useState('');
+  const [abierto, setAbierto] = useState(false);
+  const ultimoDocRef = React.useRef(null);
+
+  const consultaBase = () =>
+    db.collection('ip_direcciones')
+      .where('routerId', '==', routerId)
+      .where('estado', '==', 'disponible')
+      .orderBy(firebase.firestore.FieldPath.documentId());
+
+  const cargarPagina = async (desdeCero) => {
+    if (!routerId) return;
+    desdeCero ? setCargando(true) : setCargandoMas(true);
+
+    try {
+      let ref = consultaBase().limit(50);
+
+      if (busqueda.trim()) {
+        // Búsqueda por prefijo directo sobre el ID del documento (que
+        // es la IP): "172.18.64.2" te muestra todas las que empiezan
+        // así, sin traer el resto.
+        ref = consultaBase().startAt(busqueda.trim()).endAt(busqueda.trim() + '\uf8ff').limit(50);
+      } else if (!desdeCero && ultimoDocRef.current) {
+        ref = consultaBase().startAfter(ultimoDocRef.current).limit(50);
+      }
+
+      const snap = await ref.get();
+      const nuevos = snap.docs.map((d) => d.id);
+      ultimoDocRef.current = snap.docs[snap.docs.length - 1] ?? ultimoDocRef.current;
+      setHayMas(snap.docs.length === 50);
+      setDisponibles((prev) => (desdeCero ? nuevos : [...prev, ...nuevos]));
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCargando(false);
+      setCargandoMas(false);
+    }
+  };
 
   useEffect(() => {
     if (!routerId) { setDisponibles([]); setTotalDisponibles(null); return; }
-    setCargando(true);
-
-    // El conteo real (para mostrar en el mensaje) es una consulta
-    // aparte y liviana — no listamos las 254 en el desplegable, serían
-    // inmanejables para elegir a mano. contarDocumentos() nunca lanza
-    // una excepción sincrónica, así que un fallo acá no puede colgar
-    // el resto de la pantalla.
+    ultimoDocRef.current = null;
+    cargarPagina(true);
     contarDocumentos(
       db.collection('ip_direcciones').where('routerId', '==', routerId).where('estado', '==', 'disponible')
     ).then(setTotalDisponibles).catch((err) => console.error(err));
-
-    const unsub = db.collection('ip_direcciones')
-      .where('routerId', '==', routerId)
-      .where('estado', '==', 'disponible')
-      .orderBy(firebase.firestore.FieldPath.documentId())
-      .limit(50)
-      .onSnapshot((snap) => {
-        setDisponibles(snap.docs.map((d) => d.id));
-        setCargando(false);
-      });
-
-    return unsub;
   }, [routerId]);
+
+  // La búsqueda dispara una consulta nueva (con un pequeño debounce
+  // para no golpear Firestore en cada tecla)
+  useEffect(() => {
+    if (!routerId) return;
+    const timeout = setTimeout(() => { ultimoDocRef.current = null; cargarPagina(true); }, 300);
+    return () => clearTimeout(timeout);
+  }, [busqueda]);
+
+  const elegir = (ip) => {
+    setSeleccionada(ip);
+    setBusqueda('');
+    setAbierto(false);
+    onSeleccionar(ip);
+  };
 
   if (!routerId) {
     return html`<p class="texto-secundario">Seleccione un router para ver las IP disponibles.</p>`;
@@ -90,7 +129,7 @@ function SelectorIP({ routerId, onSeleccionar }) {
     return html`<p class="texto-secundario">Cargando IPs disponibles…</p>`;
   }
 
-  if (disponibles.length === 0) {
+  if (totalDisponibles === 0) {
     return html`
       <div class="login-error">
         No hay direcciones IP disponibles para este router. Cargue un nuevo bloque antes de continuar.
@@ -99,17 +138,53 @@ function SelectorIP({ routerId, onSeleccionar }) {
   }
 
   return html`
-    <div class="campo">
+    <div class="campo" style=${{ position: 'relative' }}>
       <label>Dirección IP</label>
-      <select onChange=${(e) => onSeleccionar(e.target.value)}>
-        <option value="">Seleccionar…</option>
-        ${disponibles.map((ip) => html`<option key=${ip} value=${ip} class="mono">${ip}</option>`)}
-      </select>
-      <div class="ayuda">
-        ${totalDisponibles != null && totalDisponibles > disponibles.length
-          ? `Mostrando las primeras ${disponibles.length} de ${totalDisponibles} IP disponibles en este router.`
-          : `${totalDisponibles ?? disponibles.length} IP disponibles en este router.`}
-      </div>
+      <input
+        type="text"
+        class="mono"
+        value=${abierto ? busqueda : seleccionada}
+        placeholder="Escribí para buscar, ej: 172.18.64.2"
+        onFocus=${() => { setAbierto(true); setBusqueda(''); }}
+        onInput=${(e) => setBusqueda(e.target.value)}
+      />
+
+      ${abierto && html`
+        <div
+          style=${{
+            position: 'absolute', top: '100%', left: 0, right: 0, zIndex: 10,
+            background: '#fff', border: '1px solid var(--color-borde)', borderRadius: 'var(--radio-borde)',
+            boxShadow: 'var(--sombra-sutil)', maxHeight: '260px', overflowY: 'auto', marginTop: '4px',
+          }}
+        >
+          ${disponibles.length === 0
+            ? html`<div style=${{ padding: '12px' }} class="texto-secundario">Sin resultados para "${busqueda}".</div>`
+            : disponibles.map(
+                (ip) => html`
+                  <div
+                    key=${ip}
+                    class="mono"
+                    style=${{ padding: '8px 12px', cursor: 'pointer' }}
+                    onMouseDown=${() => elegir(ip)}
+                    onMouseEnter=${(e) => (e.target.style.background = 'var(--color-fondo)')}
+                    onMouseLeave=${(e) => (e.target.style.background = 'transparent')}
+                  >
+                    ${ip}
+                  </div>
+                `
+              )}
+          ${!busqueda.trim() && hayMas && html`
+            <div
+              style=${{ padding: '8px 12px', textAlign: 'center', color: 'var(--color-naranja)', cursor: 'pointer', borderTop: '1px solid var(--color-borde)' }}
+              onMouseDown=${(e) => { e.preventDefault(); cargarPagina(false); }}
+            >
+              ${cargandoMas ? 'Cargando…' : 'Cargar más'}
+            </div>
+          `}
+        </div>
+      `}
+
+      <div class="ayuda">${totalDisponibles} IP disponibles en este router. Escribí para buscar una en particular, o "Cargar más" para seguir viendo la lista.</div>
     </div>
   `;
 }
