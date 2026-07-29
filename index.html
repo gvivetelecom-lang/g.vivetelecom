@@ -1,31 +1,37 @@
-# Changelog — Repositorio público (frontend)
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Vive Telecom — Gestión de Clientes y Red</title>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="root"></div>
 
-Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
+  <!-- React sin proceso de build -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  <!-- htm: permite escribir sintaxis tipo JSX con template literals, sin compilador -->
+  <script src="https://unpkg.com/htm@3.1.1/dist/htm.js"></script>
 
-## v1.3 — Módulo de Alertas
-- `modulo-alertas.js` (nuevo): centro de alertas que cruza routers sin respuesta, órdenes al agente con error, IPs reservadas hace más de 2hs sin confirmarse, y clientes suspendidos por mora que igual figuran conectados. Se refresca solo cada 60s o con el botón de recarga.
-- `app.js`: los indicadores de la topbar ("X operativos" / "X sin respuesta") ya no son valores fijos — se calculan de Firestore, y el de "sin respuesta" lleva directo al módulo de Alertas al hacer clic.
-- Nota: la consulta de inconsistencia financiero/técnico va a pedir crear un índice compuesto en Firestore la primera vez que corra (es normal, un solo clic desde el link de error).
+  <!-- Firebase (SDK compat, sin build) -->
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
 
-## v1.2 — Panel principal con datos reales
-- `modulo-dashboard.js` (nuevo): los indicadores del panel principal ahora se calculan desde Firestore (conteos de clientes, cuentas vencidas, monto pendiente, routers operativos/sin respuesta, órdenes pendientes al agente). Se refresca solo cada 60s o con el botón de recarga.
-- `app.js`: se saca el `PanelPrincipal` de datos simulados; queda solo `TarjetaIndicador` como componente compartido.
-- `index.html`: se agrega la carga de `modulo-dashboard.js`.
-
-## v1.1 — Corrección de errores de despliegue
-- `app.js`: se centralizan `estiloTh` / `estiloTd` acá (antes se declaraban también en `modulo-clientes.js`, `modulo-ips.js` y `modulo-pagos.js`, lo que rompía la carga con `SyntaxError: Identifier 'estiloTh' has already been declared`, porque los scripts clásicos comparten un mismo scope global).
-- `modulo-clientes.js`, `modulo-ips.js`, `modulo-pagos.js`: se quita la declaración duplicada.
-- `firebase-config.js`: se corrige — debía usar el SDK compat (`firebase.initializeApp(...)`), no la sintaxis de módulo ES (`import { initializeApp } from ...`), que rompía con `Cannot use import statement outside a module` porque el `<script>` que lo carga no es `type="module"`.
-
-## v1.0 — Primera versión funcional
-- Shell: login, topbar, sidebar, panel principal (con datos de ejemplo).
-- Módulo de Clientes: tabla con filtros/búsqueda + ficha consolidada, con detección de inconsistencia financiero/técnico.
-- Módulo de Direcciones IP: inventario + selector controlado + reserva transaccional.
-- Módulo de alta de servicio PPPoE (wizard de 3 pasos).
-- Módulo de Cuentas y Pagos, integrado a la ficha del cliente.
-- Módulo de Routers (estado + métricas).
-- Deploy automático a GitHub Pages vía GitHub Actions.
-
----
-
-**Convención de versión:** el número sube en la primera cifra decimal (v1.1 → v1.2) cuando se agrega o completa un módulo. Sube en la segunda cuando es una corrección de bug sobre algo ya entregado. Cuando el sistema tenga todos los módulos base completos, pasa a v2.0.
+  <script src="./firebase-config.js"></script>
+  <script src="./app.js"></script>
+  <script src="./modulo-dashboard.js"></script>
+  <script src="./modulo-ips.js"></script>
+  <script src="./modulo-alta-servicio.js"></script>
+  <script src="./modulo-pagos.js"></script>
+  <script src="./modulo-routers.js"></script>
+  <script src="./modulo-alertas.js"></script>
+  <script src="./modulo-usuarios.js"></script>
+  <script src="./modulo-clientes.js"></script>
+</body>
+</html>
