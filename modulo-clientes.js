@@ -416,12 +416,15 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
           ? html`<p class="texto-secundario">Este cliente todavía no tiene servicios cargados.</p>`
           : servicios.map(
               (s) => html`
-                <div key=${s.id} class="flex items-center justify-between" style=${{ padding: '10px 0', borderBottom: '1px solid var(--color-borde)' }}>
-                  <div>
-                    <div style=${{ fontWeight: 500 }}>${s.tipoConexion?.toUpperCase()} — ${s.planId}</div>
-                    <div class="texto-secundario mono">${s.ipAsignadaId ?? 'sin IP asignada'}</div>
+                <div key=${s.id} style=${{ padding: '10px 0', borderBottom: '1px solid var(--color-borde)' }}>
+                  <div class="flex items-center justify-between">
+                    <div>
+                      <div style=${{ fontWeight: 500 }}>${s.tipoConexion?.toUpperCase()} — ${s.planId}</div>
+                      <div class="texto-secundario mono">${s.ipAsignadaId ?? 'sin IP asignada'}</div>
+                    </div>
+                    <span class="etiqueta-estado etiqueta-info">${s.estadoTecnico}</span>
                   </div>
-                  <span class="etiqueta-estado etiqueta-info">${s.estadoTecnico}</span>
+                  <${EstadoOrdenServicio} servicio=${s} usuarioId=${usuarioId} />
                 </div>
               `
             )}
@@ -430,7 +433,70 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
   `;
 }
 
-function CampoInfo({ etiqueta, valor }) {
+function useUltimaOrdenServicio(servicioId) {
+  const [orden, setOrden] = useState(null);
+  useEffect(() => {
+    const unsub = db.collection('ordenes_mikrotik')
+      .where('servicioId', '==', servicioId)
+      .orderBy('fechaSolicitud', 'desc')
+      .limit(1)
+      .onSnapshot(
+        (snap) => setOrden(snap.empty ? null : { id: snap.docs[0].id, ...snap.docs[0].data() }),
+        (err) => console.error(err)
+      );
+    return unsub;
+  }, [servicioId]);
+  return orden;
+}
+
+function EstadoOrdenServicio({ servicio, usuarioId }) {
+  const orden = useUltimaOrdenServicio(servicio.id);
+  const [reintentando, setReintentando] = useState(false);
+
+  if (!orden) return null;
+
+  if (['pendiente', 'validando', 'procesando'].includes(orden.estado)) {
+    return html`<div class="texto-secundario" style=${{ color: 'var(--estado-proceso)' }}><i class="fa-solid fa-spinner fa-spin"></i> ${orden.tipo} en curso…</div>`;
+  }
+
+  if (orden.estado !== 'error') return null;
+
+  const reintentar = async () => {
+    setReintentando(true);
+    try {
+      // No se puede reescribir la orden fallida (las rules lo impiden
+      // a propósito, solo el agente transiciona estados) — se crea
+      // una orden nueva con los mismos datos.
+      await db.collection('ordenes_mikrotik').add({
+        tipo: orden.tipo,
+        servicioId: orden.servicioId,
+        clienteId: orden.clienteId,
+        routerId: orden.routerId,
+        parametros: orden.parametros,
+        estado: 'pendiente',
+        pasosCompletados: [],
+        usuarioSolicitante: usuarioId,
+        fechaSolicitud: firebase.firestore.FieldValue.serverTimestamp(),
+        fechaEjecucion: null,
+        resultado: null,
+        error: null,
+      });
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setReintentando(false);
+    }
+  };
+
+  return html`
+    <div class="login-error" style=${{ marginTop: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+      <span><strong>${orden.tipo} falló:</strong> ${orden.error ?? 'sin detalle'}</span>
+      <button class="btn btn-secundario" style=${{ padding: '4px 10px', flexShrink: 0 }} onClick=${reintentar} disabled=${reintentando}>
+        ${reintentando ? 'Reintentando…' : 'Reintentar'}
+      </button>
+    </div>
+  `;
+}
   return html`
     <div style=${{ minWidth: '160px' }}>
       <div class="texto-secundario" style=${{ marginBottom: '2px' }}>${etiqueta}</div>

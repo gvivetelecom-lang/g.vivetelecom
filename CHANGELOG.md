@@ -2,6 +2,16 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.15 — Visibilidad de errores del agente en la ficha del cliente
+- `modulo-clientes.js`: cada servicio en la ficha del cliente ahora muestra en tiempo real el estado de su última orden al agente — "en curso" mientras se procesa, o el mensaje de error exacto con un botón **"Reintentar"** si falló. Antes esto solo se podía ver entrando a Firestore Console o al módulo global de Alertas, sin contexto del cliente.
+- "Reintentar" crea una orden nueva con los mismos datos (no se puede reescribir la fallida — las rules lo impiden a propósito, solo el agente transiciona estados de orden).
+- Nota: esta consulta va a pedir crear un índice compuesto la primera vez (`ordenes_mikrotik`: `servicioId` + `fechaSolicitud`) — normal, un clic desde el link del error.
+
+## (servidor interno, sin cambio de versión de frontend) — Activación automática del cliente
+- `agenteMikrotik.js`: al completar con éxito el alta de un servicio PPPoE, si el cliente todavía estaba en estado "pendiente de instalación", ahora pasa automáticamente a "activo". Antes se quedaba en "pendiente" para siempre, aunque el servicio ya estuviera configurado y funcionando — no había nada que hiciera esa transición.
+- **Clientes dados de alta antes de este fix quedan con el estado viejo** y hay que corregirlos a mano una vez (Firestore Console → `clientes/{id}` → `estadoComercial: "activo"`).
+- Solo afecta `agenteMikrotik.js` — no requiere reinstalar el repo público ni redesplegar `firestore.rules`.
+
 ## v1.14 — Corrección: errores silenciosos al configurar un plan por router
 - `modulo-planes.js`: `ConfiguracionPorRouter` fallaba en silencio si el guardado o el envío de la orden al agente daban error — solo quedaba registrado en la consola del navegador, la pantalla no mostraba nada y el formulario se quedaba abierto sin explicación. Ahora muestra el error real (incluyendo el caso típico de `firestore.rules` desactualizado en el servidor).
 - **Recordatorio:** si en la v1.13 todavía no corriste `firebase deploy --only firestore:rules`, hacelo ahora — es la causa más probable de que "Guardar" se quedara colgado sin avisar.
