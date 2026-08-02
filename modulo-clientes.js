@@ -328,6 +328,63 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
   const { cliente, servicios } = useCliente(clienteId);
   const { planes: nombresPlanes, routers: nombresRouters } = useNombresPlanesYRouters();
   const [mostrarAlta, setMostrarAlta] = useState(false);
+  const [accionEnCurso, setAccionEnCurso] = useState(null);
+  const [errorAccion, setErrorAccion] = useState(null);
+
+  const cambiarEstadoCliente = async (accion) => {
+    setAccionEnCurso(accion);
+    setErrorAccion(null);
+
+    const nuevoEstadoComercial = accion === 'suspender' ? 'suspendido' : 'activo';
+    const nuevoEstadoServicio = accion === 'suspender' ? 'suspendido_mora' : 'activo';
+    const tipoOrden = accion === 'suspender' ? 'SUSPENDER_SERVICIO' : 'REHABILITAR_SERVICIO';
+    const serviciosAfectados = servicios.filter((s) => s.estadoTecnico !== 'baja');
+
+    try {
+      const timestamp = firebase.firestore.FieldValue.serverTimestamp();
+      const batch = db.batch();
+
+      batch.update(db.collection('clientes').doc(clienteId), {
+        estadoComercial: nuevoEstadoComercial,
+        ultimaModificacion: { usuarioId, fecha: timestamp },
+      });
+      serviciosAfectados.forEach((s) => {
+        batch.update(db.collection('servicios').doc(s.id), {
+          estadoComercial: nuevoEstadoServicio,
+          ultimaModificacion: { usuarioId, fecha: timestamp },
+        });
+      });
+      await batch.commit();
+
+      const ordenesBatch = db.batch();
+      serviciosAfectados.forEach((s) => {
+        ordenesBatch.set(db.collection('ordenes_mikrotik').doc(), {
+          tipo: tipoOrden,
+          servicioId: s.id,
+          clienteId,
+          routerId: s.routerId,
+          parametros: { motivo: accion === 'suspender' ? 'suspension_manual' : 'rehabilitacion_manual' },
+          estado: 'pendiente',
+          pasosCompletados: [],
+          usuarioSolicitante: usuarioId,
+          fechaSolicitud: timestamp,
+          fechaEjecucion: null,
+          resultado: null,
+          error: null,
+        });
+      });
+      await ordenesBatch.commit();
+    } catch (err) {
+      setErrorAccion(
+        err.code === 'permission-denied'
+          ? 'Tu rol no tiene permiso para esta acción.'
+          : 'No fue posible completar la acción. Revisá la consola para más detalle.'
+      );
+      console.error(err);
+    } finally {
+      setAccionEnCurso(null);
+    }
+  };
 
   if (cliente === undefined) {
     return html`<div class="texto-secundario">Cargando ficha del cliente…</div>`;
@@ -361,12 +418,25 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
         </div>
       `}
 
+      ${errorAccion && html`<div class="login-error" style=${{ marginBottom: '16px' }}>${errorAccion}</div>`}
+
       <div class="flex gap-16" style=${{ flexWrap: 'wrap', marginBottom: '16px' }}>
-        <button class="btn btn-secundario"><i class="fa-solid fa-money-bill"></i> Registrar pago</button>
-        <button class="btn btn-advertencia"><i class="fa-solid fa-arrows-rotate"></i> Cambiar plan</button>
-        <button class="btn btn-advertencia"><i class="fa-solid fa-ban"></i> Suspender</button>
-        <button class="btn btn-positivo"><i class="fa-solid fa-check"></i> Rehabilitar</button>
-        <button class="btn btn-secundario"><i class="fa-solid fa-clock-rotate-left"></i> Ver historial</button>
+        <button
+          class="btn btn-advertencia"
+          onClick=${() => cambiarEstadoCliente('suspender')}
+          disabled=${!!accionEnCurso || cliente.estadoComercial === 'suspendido' || servicios.length === 0}
+        >
+          <i class="fa-solid fa-ban"></i> ${accionEnCurso === 'suspender' ? 'Suspendiendo…' : 'Suspender'}
+        </button>
+        <button
+          class="btn btn-positivo"
+          onClick=${() => cambiarEstadoCliente('rehabilitar')}
+          disabled=${!!accionEnCurso || cliente.estadoComercial !== 'suspendido'}
+        >
+          <i class="fa-solid fa-check"></i> ${accionEnCurso === 'rehabilitar' ? 'Rehabilitando…' : 'Rehabilitar'}
+        </button>
+        <button class="btn btn-secundario" disabled title="Próximamente"><i class="fa-solid fa-arrows-rotate"></i> Cambiar plan</button>
+        <button class="btn btn-secundario" disabled title="Próximamente"><i class="fa-solid fa-clock-rotate-left"></i> Ver historial</button>
       </div>
 
       <div class="card" style=${{ marginBottom: '16px' }}>

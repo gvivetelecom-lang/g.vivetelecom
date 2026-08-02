@@ -2,6 +2,12 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.19 — Corrección: Suspender/Rehabilitar no estaban conectados
+- `modulo-clientes.js`: los botones **Suspender**, **Rehabilitar**, **Cambiar plan** y **Ver historial** de la ficha del cliente eran maqueta visual desde la v1.0, sin `onClick`. Se implementan Suspender/Rehabilitar de verdad: actualizan el estado comercial del cliente y de sus servicios, y generan la orden correspondiente (`SUSPENDER_SERVICIO`/`REHABILITAR_SERVICIO`) para cada servicio activo.
+- "Cambiar plan" y "Ver historial" quedan marcados como **"Próximamente"** (deshabilitados, con tooltip) en vez de simular que funcionan — así no vuelve a pasar que un botón no haga nada sin avisar.
+- Se quita el botón "Registrar pago" duplicado de la barra superior (no hacía nada); el que sí funciona sigue estando en la tarjeta de Cuentas, más abajo en la misma ficha.
+- La IP del cliente **no se libera** al suspender (se mantiene "asignada"), para que conserve la misma IP al rehabilitarse.
+
 ## v1.18 — Cache-busting: no más "Ctrl+Shift+R" a mano en cada entrega
 - `index.html`: todos los `<script>` y el `<link>` de `styles.css` locales ahora cargan con `?v=1.18` al final. El navegador entiende que cambió el archivo y lo descarga de nuevo automáticamente, en vez de servir una copia vieja desde la caché — que fue la causa real del aviso de error que parecía "pegado" en la ficha del cliente.
 - **A partir de ahora, cada entrega nueva va a traer ese número actualizado** en todos los archivos a la vez, así no hay que acordarse de hacer refresh forzado manualmente.
