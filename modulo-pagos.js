@@ -198,12 +198,161 @@ function RegistrarPago({ clienteId, cuentas, usuarioId, onCompletado, onCancelar
 // Tabla de cuentas del cliente
 // ---------------------------------------------------------------------
 
+function useServiciosCliente(clienteId) {
+  const [servicios, setServicios] = useState([]);
+  useEffect(() => {
+    const unsub = db.collection('servicios').where('clienteId', '==', clienteId).onSnapshot((snap) => {
+      setServicios(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, [clienteId]);
+  return servicios;
+}
+
+function hoyMasDias(dias) {
+  const fecha = new Date();
+  fecha.setDate(fecha.getDate() + dias);
+  return fecha.toISOString().slice(0, 10);
+}
+
+function periodoActual() {
+  const ahora = new Date();
+  return `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar }) {
+  const servicios = useServiciosCliente(clienteId);
+  const [servicioId, setServicioId] = useState('');
+  const [plan, setPlan] = useState(null);
+  const [periodo, setPeriodo] = useState(periodoActual());
+  const [fechaVencimiento, setFechaVencimiento] = useState(hoyMasDias(10));
+  const [fechaCorte, setFechaCorte] = useState(hoyMasDias(15));
+  const [cargos, setCargos] = useState('0');
+  const [descuentos, setDescuentos] = useState('0');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!servicioId) { setPlan(null); return; }
+    const servicio = servicios.find((s) => s.id === servicioId);
+    if (!servicio) return;
+    db.collection('planes').doc(servicio.planId).get().then((doc) => {
+      setPlan(doc.exists ? { id: doc.id, ...doc.data() } : null);
+    });
+  }, [servicioId]);
+
+  const total = plan ? plan.precio + (Number(cargos) || 0) - (Number(descuentos) || 0) + (plan.precio * (plan.impuestos || 0)) / 100 : 0;
+
+  const confirmar = async (e) => {
+    e.preventDefault();
+    if (!servicioId || !plan) { setError('Seleccioná un servicio (necesita tener un plan asociado).'); return; }
+
+    setEnviando(true);
+    setError(null);
+    try {
+      await db.collection('cuentas').add({
+        clienteId,
+        servicioId,
+        periodo,
+        fechaEmision: firebase.firestore.FieldValue.serverTimestamp(),
+        fechaVencimiento: firebase.firestore.Timestamp.fromDate(new Date(fechaVencimiento)),
+        fechaCorte: firebase.firestore.Timestamp.fromDate(new Date(fechaCorte)),
+        planId: plan.id,
+        planNombreSnapshot: plan.nombre,
+        importeSnapshot: plan.precio,
+        cargos: Number(cargos) || 0,
+        descuentos: Number(descuentos) || 0,
+        impuestos: plan.impuestos || 0,
+        total,
+        pagado: 0,
+        saldo: total,
+        estado: 'pendiente',
+        ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
+      });
+      onCompletado();
+    } catch (err) {
+      setError(err.code === 'permission-denied' ? 'Sin permiso para crear cuentas.' : 'No fue posible crear la cuenta.');
+      console.error(err);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return html`
+    <div class="card" style=${{ maxWidth: '480px', marginBottom: '16px' }}>
+      <div class="card-titulo">Nueva cuenta (manual)</div>
+      <p class="texto-secundario" style=${{ marginTop: '-8px' }}>
+        La generación automática mensual todavía no está definida — esto es para cargar una cuenta puntual mientras tanto.
+      </p>
+
+      ${error && html`<div class="login-error">${error}</div>`}
+
+      <form onSubmit=${confirmar}>
+        <div class="campo">
+          <label>Servicio</label>
+          <select value=${servicioId} onChange=${(e) => setServicioId(e.target.value)}>
+            <option value="">Seleccionar…</option>
+            ${servicios.map((s) => html`<option key=${s.id} value=${s.id}>${s.tipoConexion?.toUpperCase()} — ${s.usuarioPPPoE ?? s.id}</option>`)}
+          </select>
+        </div>
+
+        ${plan && html`
+          <div class="ayuda" style=${{ marginBottom: '12px' }}>Plan: <strong>${plan.nombre}</strong> — ${plan.precio} ${plan.moneda} (+${plan.impuestos || 0}% impuestos)</div>
+        `}
+
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 120px' }}>
+            <label>Período</label>
+            <input type="text" value=${periodo} onInput=${(e) => setPeriodo(e.target.value)} placeholder="2026-08" />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 140px' }}>
+            <label>Vencimiento</label>
+            <input type="date" value=${fechaVencimiento} onInput=${(e) => setFechaVencimiento(e.target.value)} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 140px' }}>
+            <label>Corte</label>
+            <input type="date" value=${fechaCorte} onInput=${(e) => setFechaCorte(e.target.value)} />
+          </div>
+        </div>
+
+        <div class="flex gap-16">
+          <div class="campo" style=${{ flex: 1 }}>
+            <label>Cargos extra</label>
+            <input type="number" value=${cargos} onInput=${(e) => setCargos(e.target.value)} />
+          </div>
+          <div class="campo" style=${{ flex: 1 }}>
+            <label>Descuentos</label>
+            <input type="number" value=${descuentos} onInput=${(e) => setDescuentos(e.target.value)} />
+          </div>
+        </div>
+
+        ${plan && html`<p><strong>Total: ${formatoMoneda(total, plan.moneda)}</strong></p>`}
+
+        <div class="flex justify-between">
+          <button type="button" class="btn btn-secundario" onClick=${onCancelar} disabled=${enviando}>Cancelar</button>
+          <button type="submit" class="btn btn-principal" disabled=${enviando || !plan}>${enviando ? 'Creando…' : 'Crear cuenta'}</button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
 function TablaCuentasCliente({ clienteId, usuarioId }) {
   const cuentas = useCuentasCliente(clienteId);
   const [mostrarPago, setMostrarPago] = useState(false);
+  const [mostrarNuevaCuenta, setMostrarNuevaCuenta] = useState(false);
 
   return html`
     <div>
+      ${mostrarNuevaCuenta && html`
+        <${FormularioCrearCuenta}
+          clienteId=${clienteId}
+          usuarioId=${usuarioId}
+          onCancelar=${() => setMostrarNuevaCuenta(false)}
+          onCompletado=${() => setMostrarNuevaCuenta(false)}
+        />
+      `}
+
       ${mostrarPago && html`
         <div style=${{ marginBottom: '16px' }}>
           <${RegistrarPago}
@@ -219,9 +368,14 @@ function TablaCuentasCliente({ clienteId, usuarioId }) {
       <div class="card">
         <div class="flex items-center justify-between" style=${{ marginBottom: '16px' }}>
           <div class="card-titulo" style=${{ margin: 0 }}>Cuentas</div>
-          <button class="btn btn-principal" onClick=${() => setMostrarPago(true)}>
-            <i class="fa-solid fa-money-bill"></i> Registrar pago
-          </button>
+          <div class="flex gap-8">
+            <button class="btn btn-secundario" onClick=${() => setMostrarNuevaCuenta(true)}>
+              <i class="fa-solid fa-plus"></i> Nueva cuenta
+            </button>
+            <button class="btn btn-principal" onClick=${() => setMostrarPago(true)}>
+              <i class="fa-solid fa-money-bill"></i> Registrar pago
+            </button>
+          </div>
         </div>
 
         ${cuentas.length === 0

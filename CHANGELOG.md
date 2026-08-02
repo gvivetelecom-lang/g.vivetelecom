@@ -2,6 +2,9 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.20 — Creación manual de cuentas
+- `modulo-pagos.js`: se agrega "Nueva cuenta" en la tarjeta de Cuentas de la ficha del cliente. Elegís el servicio, toma el precio del plan asociado automáticamente (con snapshot congelado, igual que se documentó desde el modelo de datos), y permite cargos/descuentos puntuales. Es un paso manual mientras se define la generación automática mensual (día del mes, manual vs. automática — sigue pendiente como decisión de negocio).
+
 ## v1.19 — Corrección: Suspender/Rehabilitar no estaban conectados
 - `modulo-clientes.js`: los botones **Suspender**, **Rehabilitar**, **Cambiar plan** y **Ver historial** de la ficha del cliente eran maqueta visual desde la v1.0, sin `onClick`. Se implementan Suspender/Rehabilitar de verdad: actualizan el estado comercial del cliente y de sus servicios, y generan la orden correspondiente (`SUSPENDER_SERVICIO`/`REHABILITAR_SERVICIO`) para cada servicio activo.
 - "Cambiar plan" y "Ver historial" quedan marcados como **"Próximamente"** (deshabilitados, con tooltip) en vez de simular que funcionan — así no vuelve a pasar que un botón no haga nada sin avisar.
