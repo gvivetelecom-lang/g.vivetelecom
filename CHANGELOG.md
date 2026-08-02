@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.16 — Corrección: error de sintaxis que rompía todo el módulo de Clientes
+- `modulo-clientes.js`: al insertar el bloque de `EstadoOrdenServicio` en la v1.15, se perdió por error la línea `function CampoInfo({ etiqueta, valor }) {`, dejando su cuerpo "suelto" — eso rompía la carga de **todo el archivo** (`SyntaxError: Illegal return statement`), no solo la ficha del cliente. Se restaura la declaración.
+- Se agrega una verificación de sintaxis (`node --check`) sobre los 14 archivos `.js` del frontend antes de armar el ZIP, para evitar que esto se repita.
+
 ## v1.15 — Visibilidad de errores del agente en la ficha del cliente
 - `modulo-clientes.js`: cada servicio en la ficha del cliente ahora muestra en tiempo real el estado de su última orden al agente — "en curso" mientras se procesa, o el mensaje de error exacto con un botón **"Reintentar"** si falló. Antes esto solo se podía ver entrando a Firestore Console o al módulo global de Alertas, sin contexto del cliente.
 - "Reintentar" crea una orden nueva con los mismos datos (no se puede reescribir la fallida — las rules lo impiden a propósito, solo el agente transiciona estados de orden).

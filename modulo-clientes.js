@@ -497,6 +497,8 @@ function EstadoOrdenServicio({ servicio, usuarioId }) {
     </div>
   `;
 }
+
+function CampoInfo({ etiqueta, valor }) {
   return html`
     <div style=${{ minWidth: '160px' }}>
       <div class="texto-secundario" style=${{ marginBottom: '2px' }}>${etiqueta}</div>
