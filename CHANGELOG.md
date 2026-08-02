@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.17 — Nombres en vez de IDs en la ficha del cliente
+- `modulo-clientes.js`: el listado de servicios mostraba el ID del plan (`iPGqjNvbOfX3X4lsDf1B`) en vez de su nombre. Ahora resuelve y muestra el nombre real.
+- `agenteMikrotik.js` (servidor interno): el mensaje de error de "plan sin configuración para este router" también usaba IDs crudos — ahora busca y muestra el nombre del plan y del router. **Requiere reemplazar `agenteMikrotik.js` en el servidor y reiniciar ese proceso** para que las próximas fallas ya salgan legibles (las órdenes viejas con error de antes de este fix van a seguir mostrando el ID, porque el texto ya quedó guardado así en Firestore — con "Reintentar" se genera una orden nueva que si vuelve a fallar, esta vez sí sale con nombres).
+
 ## v1.16 — Corrección: error de sintaxis que rompía todo el módulo de Clientes
 - `modulo-clientes.js`: al insertar el bloque de `EstadoOrdenServicio` en la v1.15, se perdió por error la línea `function CampoInfo({ etiqueta, valor }) {`, dejando su cuerpo "suelto" — eso rompía la carga de **todo el archivo** (`SyntaxError: Illegal return statement`), no solo la ficha del cliente. Se restaura la declaración.
 - Se agrega una verificación de sintaxis (`node --check`) sobre los 14 archivos `.js` del frontend antes de armar el ZIP, para evitar que esto se repita.

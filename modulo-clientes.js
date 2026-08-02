@@ -326,6 +326,7 @@ function inconsistenciaFinancieroTecnico(cliente, servicios) {
 
 function FichaCliente({ clienteId, volver, usuarioId }) {
   const { cliente, servicios } = useCliente(clienteId);
+  const { planes: nombresPlanes, routers: nombresRouters } = useNombresPlanesYRouters();
   const [mostrarAlta, setMostrarAlta] = useState(false);
 
   if (cliente === undefined) {
@@ -419,7 +420,7 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
                 <div key=${s.id} style=${{ padding: '10px 0', borderBottom: '1px solid var(--color-borde)' }}>
                   <div class="flex items-center justify-between">
                     <div>
-                      <div style=${{ fontWeight: 500 }}>${s.tipoConexion?.toUpperCase()} — ${s.planId}</div>
+                      <div style=${{ fontWeight: 500 }}>${s.tipoConexion?.toUpperCase()} — ${nombresPlanes[s.planId] ?? s.planId}</div>
                       <div class="texto-secundario mono">${s.ipAsignadaId ?? 'sin IP asignada'}</div>
                     </div>
                     <span class="etiqueta-estado etiqueta-info">${s.estadoTecnico}</span>
@@ -496,6 +497,27 @@ function EstadoOrdenServicio({ servicio, usuarioId }) {
       </button>
     </div>
   `;
+}
+
+function useNombresPlanesYRouters() {
+  const [planes, setPlanes] = useState({});
+  const [routers, setRouters] = useState({});
+
+  useEffect(() => {
+    const unsubPlanes = db.collection('planes').onSnapshot((snap) => {
+      const mapa = {};
+      snap.docs.forEach((d) => { mapa[d.id] = d.data().nombre; });
+      setPlanes(mapa);
+    });
+    const unsubRouters = db.collection('routers').onSnapshot((snap) => {
+      const mapa = {};
+      snap.docs.forEach((d) => { mapa[d.id] = d.data().nombre; });
+      setRouters(mapa);
+    });
+    return () => { unsubPlanes(); unsubRouters(); };
+  }, []);
+
+  return { planes, routers };
 }
 
 function CampoInfo({ etiqueta, valor }) {
