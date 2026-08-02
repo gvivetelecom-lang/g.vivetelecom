@@ -27,15 +27,34 @@ function formatoMoneda(valor, moneda = 'PYG') {
 
 function useCuentasCliente(clienteId) {
   const [cuentas, setCuentas] = useState([]);
+  const [error, setError] = useState(null);
+
   useEffect(() => {
+    setError(null);
+    // where(clienteId) + orderBy(periodo) en campos distintos: la
+    // primera vez que corre esta consulta, Firestore va a pedir crear
+    // un índice compuesto. Sin manejar el error acá, el listener
+    // fallaba en silencio — la cuenta se creaba bien, pero esta lista
+    // nunca se enteraba de que había algo nuevo, ni avisaba por qué.
     const unsub = db.collection('cuentas')
       .where('clienteId', '==', clienteId)
       .orderBy('periodo', 'desc')
       .limit(24)
-      .onSnapshot((snap) => setCuentas(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+      .onSnapshot(
+        (snap) => setCuentas(snap.docs.map((d) => ({ id: d.id, ...d.data() }))),
+        (err) => {
+          console.error(err);
+          setError(
+            err.code === 'failed-precondition'
+              ? 'Firestore necesita crear un índice para esta consulta. Revisá la consola del navegador (F12): el mensaje trae un link para crearlo con un clic — después de eso, esta pantalla funciona sola.'
+              : 'No fue posible cargar las cuentas de este cliente.'
+          );
+        }
+      );
     return unsub;
   }, [clienteId]);
-  return cuentas;
+
+  return { cuentas, error };
 }
 
 // ---------------------------------------------------------------------
@@ -338,7 +357,7 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
 }
 
 function TablaCuentasCliente({ clienteId, usuarioId }) {
-  const cuentas = useCuentasCliente(clienteId);
+  const { cuentas, error } = useCuentasCliente(clienteId);
   const [mostrarPago, setMostrarPago] = useState(false);
   const [mostrarNuevaCuenta, setMostrarNuevaCuenta] = useState(false);
 
@@ -377,6 +396,8 @@ function TablaCuentasCliente({ clienteId, usuarioId }) {
             </button>
           </div>
         </div>
+
+        ${error && html`<div class="login-error" style=${{ marginBottom: '16px' }}>${error}</div>`}
 
         ${cuentas.length === 0
           ? html`<p class="texto-secundario">Todavía no hay cuentas generadas para este cliente.</p>`

@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.21 — Corrección: "Nueva cuenta" no aparecía en la lista
+- `modulo-pagos.js`: `useCuentasCliente` no manejaba errores del listener de Firestore. Si la consulta (`clienteId` + `orderBy(periodo)`) necesitaba un índice compuesto todavía no creado, fallaba en silencio — la cuenta se creaba bien, pero la lista nunca se actualizaba ni avisaba por qué. Ahora muestra el error real, incluyendo el link para crear el índice si es ese el caso (Firestore lo pide una sola vez).
+- Reportado con informe paso a paso — gracias por la claridad, ayudó a encontrarlo rápido.
+
 ## v1.20 — Creación manual de cuentas
 - `modulo-pagos.js`: se agrega "Nueva cuenta" en la tarjeta de Cuentas de la ficha del cliente. Elegís el servicio, toma el precio del plan asociado automáticamente (con snapshot congelado, igual que se documentó desde el modelo de datos), y permite cargos/descuentos puntuales. Es un paso manual mientras se define la generación automática mensual (día del mes, manual vs. automática — sigue pendiente como decisión de negocio).
 
