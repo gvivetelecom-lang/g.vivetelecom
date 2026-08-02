@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.18 — Cache-busting: no más "Ctrl+Shift+R" a mano en cada entrega
+- `index.html`: todos los `<script>` y el `<link>` de `styles.css` locales ahora cargan con `?v=1.18` al final. El navegador entiende que cambió el archivo y lo descarga de nuevo automáticamente, en vez de servir una copia vieja desde la caché — que fue la causa real del aviso de error que parecía "pegado" en la ficha del cliente.
+- **A partir de ahora, cada entrega nueva va a traer ese número actualizado** en todos los archivos a la vez, así no hay que acordarse de hacer refresh forzado manualmente.
+
 ## v1.17 — Nombres en vez de IDs en la ficha del cliente
 - `modulo-clientes.js`: el listado de servicios mostraba el ID del plan (`iPGqjNvbOfX3X4lsDf1B`) en vez de su nombre. Ahora resuelve y muestra el nombre real.
 - `agenteMikrotik.js` (servidor interno): el mensaje de error de "plan sin configuración para este router" también usaba IDs crudos — ahora busca y muestra el nombre del plan y del router. **Requiere reemplazar `agenteMikrotik.js` en el servidor y reiniciar ese proceso** para que las próximas fallas ya salgan legibles (las órdenes viejas con error de antes de este fix van a seguir mostrando el ID, porque el texto ya quedó guardado así en Firestore — con "Reintentar" se genera una orden nueva que si vuelve a fallar, esta vez sí sale con nombres).
