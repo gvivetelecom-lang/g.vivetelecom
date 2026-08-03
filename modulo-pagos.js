@@ -184,7 +184,7 @@ function RegistrarPago({ clienteId, cuentas, usuarioId, onCompletado, onCancelar
               <div key=${c.id} class="flex items-center justify-between gap-16" style=${{ padding: '8px 0', borderBottom: '1px solid var(--color-borde)' }}>
                 <div>
                   <div style=${{ fontWeight: 500 }}>${c.periodo}</div>
-                  <div class="texto-secundario">Saldo: ${formatoMoneda(c.saldo)}</div>
+                  <div class="texto-secundario">Saldo: ${formatoMoneda(c.saldo, c.moneda)}</div>
                 </div>
                 <input
                   type="number"
@@ -279,6 +279,7 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
         planId: plan.id,
         planNombreSnapshot: plan.nombre,
         importeSnapshot: plan.precio,
+        moneda: plan.moneda,
         cargos: Number(cargos) || 0,
         descuentos: Number(descuentos) || 0,
         impuestos: plan.impuestos || 0,
@@ -418,9 +419,9 @@ function TablaCuentasCliente({ clienteId, usuarioId }) {
                     (c) => html`
                       <tr key=${c.id} style=${{ borderBottom: '1px solid var(--color-borde)' }}>
                         <td style=${estiloTd}>${c.periodo}</td>
-                        <td style=${estiloTd}>${formatoMoneda(c.total)}</td>
-                        <td style=${estiloTd} class="texto-secundario">${formatoMoneda(c.pagado)}</td>
-                        <td style=${estiloTd} style=${{ fontWeight: 600 }}>${formatoMoneda(c.saldo)}</td>
+                        <td style=${estiloTd}>${formatoMoneda(c.total, c.moneda)}</td>
+                        <td style=${estiloTd} class="texto-secundario">${formatoMoneda(c.pagado, c.moneda)}</td>
+                        <td style=${estiloTd} style=${{ fontWeight: 600 }}>${formatoMoneda(c.saldo, c.moneda)}</td>
                         <td style=${estiloTd} class="texto-secundario">
                           ${c.fechaVencimiento ? new Date(c.fechaVencimiento.seconds * 1000).toLocaleDateString('es-PY') : '—'}
                         </td>

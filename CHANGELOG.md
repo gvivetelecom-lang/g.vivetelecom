@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.22 — Corrección: cuentas en USD se mostraban como si fueran PYG
+- `modulo-pagos.js`: al crear una cuenta manual, nunca se guardaba la moneda del plan (`moneda`) en el documento — la tabla asumía guaraníes siempre, así que un plan en USD (ej. "70 USD") aparecía como "Gs. 70". Ahora la cuenta guarda un snapshot de la moneda (igual que ya hacía con el precio) y la tabla la usa para formatear.
+- **Cuentas ya creadas antes de este fix** van a seguir mostrando el símbolo incorrecto hasta que se les agregue el campo `moneda` a mano en Firestore, o se borren y recreen.
+
 ## v1.21 — Corrección: "Nueva cuenta" no aparecía en la lista
 - `modulo-pagos.js`: `useCuentasCliente` no manejaba errores del listener de Firestore. Si la consulta (`clienteId` + `orderBy(periodo)`) necesitaba un índice compuesto todavía no creado, fallaba en silencio — la cuenta se creaba bien, pero la lista nunca se actualizaba ni avisaba por qué. Ahora muestra el error real, incluyendo el link para crear el índice si es ese el caso (Firestore lo pide una sola vez).
 - Reportado con informe paso a paso — gracias por la claridad, ayudó a encontrarlo rápido.
