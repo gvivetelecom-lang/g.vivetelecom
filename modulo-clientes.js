@@ -435,7 +435,6 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
         >
           <i class="fa-solid fa-check"></i> ${accionEnCurso === 'rehabilitar' ? 'Rehabilitando…' : 'Rehabilitar'}
         </button>
-        <button class="btn btn-secundario" disabled title="Próximamente"><i class="fa-solid fa-arrows-rotate"></i> Cambiar plan</button>
         <button class="btn btn-secundario" disabled title="Próximamente"><i class="fa-solid fa-clock-rotate-left"></i> Ver historial</button>
       </div>
 
@@ -602,11 +601,45 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
     setGuardando(true);
     setError(null);
     try {
-      await db.collection('servicios').doc(s.id).update({
-        planId,
-        usuarioPPPoE: usuarioPPPoE.trim(),
-        ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
-      });
+      const cambioDePlan = planId !== s.planId;
+
+      if (cambioDePlan) {
+        // Verifica antes de encolar: si el plan elegido no tiene
+        // configuración técnica para este router, avisa de una sin
+        // generar una orden condenada a fallar.
+        const configDoc = await db.collection('planes').doc(planId).collection('configuracionPorRouter').doc(s.routerId).get();
+        if (!configDoc.exists) {
+          setError('El plan elegido no tiene configuración técnica cargada para este router. Configuralo primero en Planes → (el router) → Configurar.');
+          setGuardando(false);
+          return;
+        }
+
+        await db.collection('ordenes_mikrotik').add({
+          tipo: 'CAMBIAR_PLAN',
+          servicioId: s.id,
+          clienteId: s.clienteId,
+          routerId: s.routerId,
+          parametros: { planId },
+          estado: 'pendiente',
+          pasosCompletados: [],
+          usuarioSolicitante: usuarioId,
+          fechaSolicitud: firebase.firestore.FieldValue.serverTimestamp(),
+          fechaEjecucion: null,
+          resultado: null,
+          error: null,
+        });
+      }
+
+      // El usuario PPPoE sí se corrige directo en el sistema — cambiar
+      // el nombre real del secret en el router es más delicado (afecta
+      // la config del cliente en su equipo) y queda fuera de este botón.
+      if (usuarioPPPoE.trim() !== (s.usuarioPPPoE ?? '')) {
+        await db.collection('servicios').doc(s.id).update({
+          usuarioPPPoE: usuarioPPPoE.trim(),
+          ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
+        });
+      }
+
       setEditando(false);
     } catch (err) {
       setError(err.code === 'permission-denied' ? 'Sin permiso para editar este servicio.' : 'No fue posible guardar los cambios.');
@@ -636,8 +669,8 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
 
       ${editando && html`
         <div style=${{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--color-borde)' }}>
-          <div class="login-error" style=${{ background: 'rgba(217,119,6,0.08)', borderColor: 'rgba(217,119,6,0.25)', color: 'var(--estado-pendiente)', marginBottom: '10px' }}>
-            Esto solo actualiza el registro en el sistema. Si el plan realmente cambia, el perfil PPP en el router hay que ajustarlo a mano en Winbox por ahora (el tipo de orden "Cambiar plan" para el agente todavía no está construido).
+          <div class="login-error" style=${{ background: 'rgba(37,99,235,0.06)', borderColor: 'rgba(37,99,235,0.25)', color: 'var(--estado-proceso)', marginBottom: '10px' }}>
+            Cambiar el plan genera una orden real al agente: actualiza el perfil PPP en el router y reconecta la sesión si estaba activa. El plan elegido necesita tener configuración técnica cargada para este router (Planes → Configurar). El usuario PPPoE, en cambio, solo se corrige en el sistema.
           </div>
           ${error && html`<div class="login-error" style=${{ marginBottom: '10px' }}>${error}</div>`}
           <div class="flex gap-16" style=${{ flexWrap: 'wrap', alignItems: 'flex-end' }}>

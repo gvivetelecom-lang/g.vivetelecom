@@ -2,6 +2,13 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.26 — Cambio de plan real: se aplica en el router, no solo en el sistema
+- **`agenteMikrotik.js` (servidor interno)**: nuevo tipo de orden `CAMBIAR_PLAN` — ya estaba en la lista blanca de las rules desde el principio, faltaba el handler. Busca la configuración del plan nuevo para ese router, actualiza el perfil PPP del secret real, y si el cliente tenía una sesión activa la reconecta (RouterOS no aplica un profile nuevo a una sesión ya establecida hasta que se reconecta).
+- `modulo-clientes.js`: "Editar servicio" ahora dispara esa orden real al cambiar el plan, en vez de solo actualizar Firestore. Antes de encolarla, verifica que el plan elegido tenga configuración técnica para el router del servicio — si no la tiene, avisa al toque en vez de generar una orden condenada a fallar.
+- El usuario PPPoE se sigue corrigiendo solo en el sistema (cambiar el nombre real del secret en el router es más delicado, queda para más adelante).
+- Se quita el botón "Cambiar plan" de la barra superior de la ficha (quedaba ambiguo con qué servicio, si el cliente tuviera más de uno) — la edición real vive en cada servicio, donde tiene sentido.
+- **⚠️ Este ZIP toca los dos lados.** Reemplazá `agenteMikrotik.js` en el servidor interno y reiniciá ese proceso.
+
 ## v1.25 — Corrección: pantalla en blanco al abrir la ficha de un cliente
 - `modulo-clientes.js`: al restaurar `CampoInfo` en la v1.24, se perdió también el `<div>` contenedor que envolvía el contenido — quedó HTML mal formado (`h.push is not a function`, un error interno de `htm` ante tags sin cerrar correctamente), y como `CampoInfo` se usa en la sección "Información general" de **toda** ficha de cliente, rompía la pantalla completa apenas se abría cualquier cliente.
 - Se agrega un chequeo extra antes de armar cada ZIP: además de `node --check` (sintaxis JS), ahora se verifica que la cantidad de etiquetas `<div>`, `<form>`, `<table>`, etc. abiertas y cerradas coincida en los 14 archivos, para agarrar este tipo de error de edición antes de entregarlo.
