@@ -2,6 +2,11 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.24 — Editar servicio existente
+- `modulo-clientes.js`: cada servicio en la ficha del cliente ahora tiene un botón **"Editar"** — permite cambiar el plan asociado y el usuario PPPoE. Marca con una advertencia que esto solo actualiza el registro en el sistema (no reconfigura el router — el tipo de orden `CAMBIAR_PLAN` para el agente sigue pendiente).
+- Si el plan de un servicio fue borrado (por ejemplo con `eliminarPlanes.js`), ahora se muestra "(plan no encontrado — puede haber sido borrado)" en vez de solo el ID crudo, y el selector de edición lo deja elegir uno nuevo.
+- **Corrección de sintaxis:** al insertar este bloque se perdió por error la declaración de `CampoInfo` (mismo tipo de bug que la v1.16) — corregido antes de armar el ZIP. Se verificaron los 14 archivos con `node --check` sin excepción.
+
 ## v1.23 — Cambio de modelo: una cuenta puede agrupar varios servicios
 Antes: `cuentas/{id}.servicioId` — una cuenta = un solo servicio.
 Ahora: `cuentas/{id}.lineas[]` — una cuenta pertenece al **cliente** y puede incluir uno o varios servicios (útil para corporativos con más de una conexión, que reciben una sola factura consolidada).

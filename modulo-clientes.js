@@ -485,20 +485,7 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
         </div>
         ${servicios.length === 0
           ? html`<p class="texto-secundario">Este cliente todavía no tiene servicios cargados.</p>`
-          : servicios.map(
-              (s) => html`
-                <div key=${s.id} style=${{ padding: '10px 0', borderBottom: '1px solid var(--color-borde)' }}>
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <div style=${{ fontWeight: 500 }}>${s.tipoConexion?.toUpperCase()} — ${nombresPlanes[s.planId] ?? s.planId}</div>
-                      <div class="texto-secundario mono">${s.ipAsignadaId ?? 'sin IP asignada'}</div>
-                    </div>
-                    <span class="etiqueta-estado etiqueta-info">${s.estadoTecnico}</span>
-                  </div>
-                  <${EstadoOrdenServicio} servicio=${s} usuarioId=${usuarioId} />
-                </div>
-              `
-            )}
+          : servicios.map((s) => html`<${FilaServicio} key=${s.id} servicio=${s} usuarioId=${usuarioId} nombresPlanes=${nombresPlanes} />`)}
       </div>
     </div>
   `;
@@ -590,9 +577,93 @@ function useNombresPlanesYRouters() {
   return { planes, routers };
 }
 
+function usePlanesActivos() {
+  const [planes, setPlanes] = useState([]);
+  useEffect(() => {
+    const unsub = db.collection('planes').where('estado', '==', 'activo').onSnapshot((snap) => {
+      setPlanes(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+    });
+    return unsub;
+  }, []);
+  return planes;
+}
+
+function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
+  const [editando, setEditando] = useState(false);
+  const [planId, setPlanId] = useState(s.planId);
+  const [usuarioPPPoE, setUsuarioPPPoE] = useState(s.usuarioPPPoE ?? '');
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState(null);
+  const planesActivos = usePlanesActivos();
+
+  const planDesconocido = !nombresPlanes[s.planId];
+
+  const guardar = async () => {
+    setGuardando(true);
+    setError(null);
+    try {
+      await db.collection('servicios').doc(s.id).update({
+        planId,
+        usuarioPPPoE: usuarioPPPoE.trim(),
+        ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
+      });
+      setEditando(false);
+    } catch (err) {
+      setError(err.code === 'permission-denied' ? 'Sin permiso para editar este servicio.' : 'No fue posible guardar los cambios.');
+      console.error(err);
+    } finally {
+      setGuardando(false);
+    }
+  };
+
+  return html`
+    <div style=${{ padding: '10px 0', borderBottom: '1px solid var(--color-borde)' }}>
+      <div class="flex items-center justify-between">
+        <div>
+          <div style=${{ fontWeight: 500 }}>
+            ${s.tipoConexion?.toUpperCase()} — ${nombresPlanes[s.planId] ?? s.planId}
+            ${planDesconocido && html`<span class="texto-secundario"> (plan no encontrado — puede haber sido borrado)</span>`}
+          </div>
+          <div class="texto-secundario mono">${s.ipAsignadaId ?? 'sin IP asignada'}</div>
+        </div>
+        <div class="flex items-center gap-8">
+          <span class="etiqueta-estado etiqueta-info">${s.estadoTecnico}</span>
+          <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setEditando(!editando)}>
+            ${editando ? 'Cerrar' : 'Editar'}
+          </button>
+        </div>
+      </div>
+
+      ${editando && html`
+        <div style=${{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--color-borde)' }}>
+          <div class="login-error" style=${{ background: 'rgba(217,119,6,0.08)', borderColor: 'rgba(217,119,6,0.25)', color: 'var(--estado-pendiente)', marginBottom: '10px' }}>
+            Esto solo actualiza el registro en el sistema. Si el plan realmente cambia, el perfil PPP en el router hay que ajustarlo a mano en Winbox por ahora (el tipo de orden "Cambiar plan" para el agente todavía no está construido).
+          </div>
+          ${error && html`<div class="login-error" style=${{ marginBottom: '10px' }}>${error}</div>`}
+          <div class="flex gap-16" style=${{ flexWrap: 'wrap', alignItems: 'flex-end' }}>
+            <div class="campo" style=${{ flex: '1 1 200px', marginBottom: 0 }}>
+              <label>Plan</label>
+              <select value=${planId} onChange=${(e) => setPlanId(e.target.value)}>
+                ${!nombresPlanes[planId] && html`<option value=${planId}>${planId} (no encontrado)</option>`}
+                ${planesActivos.map((p) => html`<option key=${p.id} value=${p.id}>${p.nombre}</option>`)}
+              </select>
+            </div>
+            <div class="campo" style=${{ flex: '1 1 200px', marginBottom: 0 }}>
+              <label>Usuario PPPoE</label>
+              <input type="text" value=${usuarioPPPoE} onInput=${(e) => setUsuarioPPPoE(e.target.value)} />
+            </div>
+            <button class="btn btn-principal" onClick=${guardar} disabled=${guardando}>${guardando ? 'Guardando…' : 'Guardar'}</button>
+          </div>
+        </div>
+      `}
+
+      <${EstadoOrdenServicio} servicio=${s} usuarioId=${usuarioId} />
+    </div>
+  `;
+}
+
 function CampoInfo({ etiqueta, valor }) {
   return html`
-    <div style=${{ minWidth: '160px' }}>
       <div class="texto-secundario" style=${{ marginBottom: '2px' }}>${etiqueta}</div>
       <div>${valor || '—'}</div>
     </div>
