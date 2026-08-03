@@ -241,8 +241,8 @@ function periodoActual() {
 
 function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar }) {
   const servicios = useServiciosCliente(clienteId);
-  const [servicioId, setServicioId] = useState('');
-  const [plan, setPlan] = useState(null);
+  const [seleccionados, setSeleccionados] = useState(new Set());
+  const [planesPorId, setPlanesPorId] = useState({}); // planId -> plan
   const [periodo, setPeriodo] = useState(periodoActual());
   const [fechaVencimiento, setFechaVencimiento] = useState(hoyMasDias(10));
   const [fechaCorte, setFechaCorte] = useState(hoyMasDias(15));
@@ -251,38 +251,64 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
 
+  // Carga (una vez por planId) los planes de todos los servicios del cliente
   useEffect(() => {
-    if (!servicioId) { setPlan(null); return; }
-    const servicio = servicios.find((s) => s.id === servicioId);
-    if (!servicio) return;
-    db.collection('planes').doc(servicio.planId).get().then((doc) => {
-      setPlan(doc.exists ? { id: doc.id, ...doc.data() } : null);
+    servicios.forEach((s) => {
+      if (!s.planId || planesPorId[s.planId]) return;
+      db.collection('planes').doc(s.planId).get().then((doc) => {
+        if (doc.exists) setPlanesPorId((prev) => ({ ...prev, [doc.id]: { id: doc.id, ...doc.data() } }));
+      });
     });
-  }, [servicioId]);
+  }, [servicios]);
 
-  const total = plan ? plan.precio + (Number(cargos) || 0) - (Number(descuentos) || 0) + (plan.precio * (plan.impuestos || 0)) / 100 : 0;
+  const alternar = (servicioId) => {
+    setSeleccionados((prev) => {
+      const nuevo = new Set(prev);
+      nuevo.has(servicioId) ? nuevo.delete(servicioId) : nuevo.add(servicioId);
+      return nuevo;
+    });
+  };
+
+  const lineas = servicios
+    .filter((s) => seleccionados.has(s.id))
+    .map((s) => ({ servicio: s, plan: planesPorId[s.planId] }))
+    .filter((l) => l.plan);
+
+  const monedas = new Set(lineas.map((l) => l.plan.moneda));
+  const monedaMixta = monedas.size > 1;
+  const moneda = lineas[0]?.plan.moneda ?? 'PYG';
+
+  const subtotal = lineas.reduce((sum, l) => sum + l.plan.precio, 0);
+  const impuestosMonto = lineas.reduce((sum, l) => sum + (l.plan.precio * (l.plan.impuestos || 0)) / 100, 0);
+  const total = subtotal + impuestosMonto + (Number(cargos) || 0) - (Number(descuentos) || 0);
 
   const confirmar = async (e) => {
     e.preventDefault();
-    if (!servicioId || !plan) { setError('Seleccioná un servicio (necesita tener un plan asociado).'); return; }
+    if (lineas.length === 0) { setError('Seleccioná al menos un servicio.'); return; }
+    if (monedaMixta) { setError('Los servicios elegidos tienen planes en monedas distintas — no se pueden combinar en la misma cuenta.'); return; }
 
     setEnviando(true);
     setError(null);
     try {
+      const lineasParaGuardar = lineas.map((l) => ({
+        servicioId: l.servicio.id,
+        planId: l.plan.id,
+        planNombreSnapshot: l.plan.nombre,
+        importeSnapshot: l.plan.precio,
+      }));
+
       await db.collection('cuentas').add({
         clienteId,
-        servicioId,
+        servicioIds: lineasParaGuardar.map((l) => l.servicioId),
+        lineas: lineasParaGuardar,
         periodo,
         fechaEmision: firebase.firestore.FieldValue.serverTimestamp(),
         fechaVencimiento: firebase.firestore.Timestamp.fromDate(new Date(fechaVencimiento)),
         fechaCorte: firebase.firestore.Timestamp.fromDate(new Date(fechaCorte)),
-        planId: plan.id,
-        planNombreSnapshot: plan.nombre,
-        importeSnapshot: plan.precio,
-        moneda: plan.moneda,
+        moneda,
         cargos: Number(cargos) || 0,
         descuentos: Number(descuentos) || 0,
-        impuestos: plan.impuestos || 0,
+        impuestos: impuestosMonto,
         total,
         pagado: 0,
         saldo: total,
@@ -299,26 +325,32 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
   };
 
   return html`
-    <div class="card" style=${{ maxWidth: '480px', marginBottom: '16px' }}>
+    <div class="card" style=${{ maxWidth: '520px', marginBottom: '16px' }}>
       <div class="card-titulo">Nueva cuenta (manual)</div>
       <p class="texto-secundario" style=${{ marginTop: '-8px' }}>
-        La generación automática mensual todavía no está definida — esto es para cargar una cuenta puntual mientras tanto.
+        Podés incluir uno o varios servicios en la misma cuenta — útil para clientes con más de una conexión.
       </p>
 
       ${error && html`<div class="login-error">${error}</div>`}
 
       <form onSubmit=${confirmar}>
         <div class="campo">
-          <label>Servicio</label>
-          <select value=${servicioId} onChange=${(e) => setServicioId(e.target.value)}>
-            <option value="">Seleccionar…</option>
-            ${servicios.map((s) => html`<option key=${s.id} value=${s.id}>${s.tipoConexion?.toUpperCase()} — ${s.usuarioPPPoE ?? s.id}</option>`)}
-          </select>
+          <label>Servicios a incluir</label>
+          ${servicios.length === 0
+            ? html`<p class="texto-secundario">Este cliente no tiene servicios cargados.</p>`
+            : servicios.map((s) => {
+                const plan = planesPorId[s.planId];
+                return html`
+                  <label key=${s.id} class="flex items-center gap-8" style=${{ fontWeight: 400, padding: '6px 0', cursor: 'pointer' }}>
+                    <input type="checkbox" checked=${seleccionados.has(s.id)} onChange=${() => alternar(s.id)} style=${{ width: 'auto' }} />
+                    <span>${s.tipoConexion?.toUpperCase()} — ${s.usuarioPPPoE ?? s.id}</span>
+                    <span class="texto-secundario">${plan ? `— ${plan.nombre} (${plan.precio} ${plan.moneda})` : 'sin plan asociado'}</span>
+                  </label>
+                `;
+              })}
         </div>
 
-        ${plan && html`
-          <div class="ayuda" style=${{ marginBottom: '12px' }}>Plan: <strong>${plan.nombre}</strong> — ${plan.precio} ${plan.moneda} (+${plan.impuestos || 0}% impuestos)</div>
-        `}
+        ${monedaMixta && html`<div class="login-error">Los servicios elegidos tienen planes en monedas distintas — elegí solo servicios con la misma moneda por cuenta.</div>`}
 
         <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
           <div class="campo" style=${{ flex: '1 1 120px' }}>
@@ -346,11 +378,13 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
           </div>
         </div>
 
-        ${plan && html`<p><strong>Total: ${formatoMoneda(total, plan.moneda)}</strong></p>`}
+        ${lineas.length > 0 && !monedaMixta && html`
+          <p><strong>Total: ${formatoMoneda(total, moneda)}</strong> <span class="texto-secundario">(${lineas.length} servicio${lineas.length > 1 ? 's' : ''})</span></p>
+        `}
 
         <div class="flex justify-between">
           <button type="button" class="btn btn-secundario" onClick=${onCancelar} disabled=${enviando}>Cancelar</button>
-          <button type="submit" class="btn btn-principal" disabled=${enviando || !plan}>${enviando ? 'Creando…' : 'Crear cuenta'}</button>
+          <button type="submit" class="btn btn-principal" disabled=${enviando || lineas.length === 0 || monedaMixta}>${enviando ? 'Creando…' : 'Crear cuenta'}</button>
         </div>
       </form>
     </div>
@@ -415,25 +449,51 @@ function TablaCuentasCliente({ clienteId, usuarioId }) {
                   </tr>
                 </thead>
                 <tbody>
-                  ${cuentas.map(
-                    (c) => html`
-                      <tr key=${c.id} style=${{ borderBottom: '1px solid var(--color-borde)' }}>
-                        <td style=${estiloTd}>${c.periodo}</td>
-                        <td style=${estiloTd}>${formatoMoneda(c.total, c.moneda)}</td>
-                        <td style=${estiloTd} class="texto-secundario">${formatoMoneda(c.pagado, c.moneda)}</td>
-                        <td style=${estiloTd} style=${{ fontWeight: 600 }}>${formatoMoneda(c.saldo, c.moneda)}</td>
-                        <td style=${estiloTd} class="texto-secundario">
-                          ${c.fechaVencimiento ? new Date(c.fechaVencimiento.seconds * 1000).toLocaleDateString('es-PY') : '—'}
-                        </td>
-                        <td style=${estiloTd}><${EtiquetaEstadoCuenta} estado=${c.estado} /></td>
-                      </tr>
-                    `
-                  )}
+                  ${cuentas.map((c) => html`<${FilaCuenta} key=${c.id} cuenta=${c} />`)}
                 </tbody>
               </table>
             `}
       </div>
     </div>
+  `;
+}
+
+function FilaCuenta({ cuenta: c }) {
+  const [expandido, setExpandido] = useState(false);
+  const lineas = c.lineas ?? [];
+  const puedeExpandir = lineas.length > 0;
+
+  return html`
+    <${React.Fragment}>
+      <tr style=${{ borderBottom: expandido ? 'none' : '1px solid var(--color-borde)', cursor: puedeExpandir ? 'pointer' : 'default' }} onClick=${() => puedeExpandir && setExpandido(!expandido)}>
+        <td style=${estiloTd}>
+          <div class="flex items-center gap-8">
+            ${puedeExpandir && html`<i class="fa-solid ${expandido ? 'fa-chevron-down' : 'fa-chevron-right'} texto-secundario" style=${{ fontSize: '0.7em' }}></i>`}
+            <span>${c.periodo}</span>
+            ${lineas.length > 1 && html`<span class="texto-secundario">(${lineas.length} servicios)</span>`}
+          </div>
+        </td>
+        <td style=${estiloTd}>${formatoMoneda(c.total, c.moneda)}</td>
+        <td style=${estiloTd} class="texto-secundario">${formatoMoneda(c.pagado, c.moneda)}</td>
+        <td style=${estiloTd} style=${{ fontWeight: 600 }}>${formatoMoneda(c.saldo, c.moneda)}</td>
+        <td style=${estiloTd} class="texto-secundario">
+          ${c.fechaVencimiento ? new Date(c.fechaVencimiento.seconds * 1000).toLocaleDateString('es-PY') : '—'}
+        </td>
+        <td style=${estiloTd}><${EtiquetaEstadoCuenta} estado=${c.estado} /></td>
+      </tr>
+      ${expandido && html`
+        <tr style=${{ borderBottom: '1px solid var(--color-borde)' }}>
+          <td colspan="6" style=${{ padding: '0 16px 12px 40px', background: 'var(--color-fondo)' }}>
+            ${lineas.map((l) => html`
+              <div key=${l.servicioId} class="flex items-center justify-between" style=${{ padding: '4px 0' }}>
+                <span class="texto-secundario">${l.planNombreSnapshot}</span>
+                <span class="mono texto-secundario">${formatoMoneda(l.importeSnapshot, c.moneda)}</span>
+              </div>
+            `)}
+          </td>
+        </tr>
+      `}
+    <//>
   `;
 }
 

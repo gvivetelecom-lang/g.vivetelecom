@@ -2,6 +2,16 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.23 — Cambio de modelo: una cuenta puede agrupar varios servicios
+Antes: `cuentas/{id}.servicioId` — una cuenta = un solo servicio.
+Ahora: `cuentas/{id}.lineas[]` — una cuenta pertenece al **cliente** y puede incluir uno o varios servicios (útil para corporativos con más de una conexión, que reciben una sola factura consolidada).
+
+- `modulo-pagos.js`: "Nueva cuenta" ahora deja elegir varios servicios con checkboxes (valida que todos compartan la misma moneda), y la tabla de cuentas muestra cada fila expandible con el detalle de servicios incluidos.
+- **`actualizarSaldos.js` (servidor interno)**: la rehabilitación automática ahora evalúa cada servicio de la cuenta por separado — un cliente con 2 servicios puede tener uno saldado y otro no, y no correspondía rehabilitar los dos a la vez solo porque el cliente en general no tuviera más deuda.
+- **Compatibilidad:** las cuentas creadas antes de este cambio (con el `servicioId` viejo) se siguen leyendo sin problema — el código convierte automáticamente al formato nuevo al procesarlas.
+- **⚠️ Este ZIP toca los dos lados.** Actualizá `actualizarSaldos.js` en el servidor interno y reiniciá ese proceso.
+- Nota: la consulta de rehabilitación (`servicioIds array-contains` + `estado in`) va a pedir un índice compuesto la primera vez — normal, un clic desde el link del error.
+
 ## v1.22 — Corrección: cuentas en USD se mostraban como si fueran PYG
 - `modulo-pagos.js`: al crear una cuenta manual, nunca se guardaba la moneda del plan (`moneda`) en el documento — la tabla asumía guaraníes siempre, así que un plan en USD (ej. "70 USD") aparecía como "Gs. 70". Ahora la cuenta guarda un snapshot de la moneda (igual que ya hacía con el precio) y la tabla la usa para formatear.
 - **Cuentas ya creadas antes de este fix** van a seguir mostrando el símbolo incorrecto hasta que se les agregue el campo `moneda` a mano en Firestore, o se borren y recreen.
