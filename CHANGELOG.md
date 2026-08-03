@@ -2,6 +2,12 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.27 — Dar de baja (1 de 4 pendientes del negocio)
+- **`agenteMikrotik.js` (servidor interno)**: nuevo tipo de orden `DAR_DE_BAJA` — borra el PPP Secret del router, desconecta la sesión activa si había, libera la IP (queda "disponible" de nuevo) y deja el registro en `ip_asignaciones` (inmutable, nunca se borra), y marca el servicio como `baja` en ambos estados (técnico y comercial).
+- `modulo-clientes.js`: botón **"Dar de baja"** por servicio, con confirmación explícita antes de ejecutar (es irreversible con un clic). Los servicios ya dados de baja dejan de mostrar los botones de acción.
+- **⚠️ Este ZIP toca los dos lados.** Reemplazá `agenteMikrotik.js` en el servidor interno y reiniciá ese proceso.
+- Van 4 pendientes del negocio anotados: Dar de baja (listo), Vencimientos y cortes (pantalla), Generación mensual de cuentas, Modificar PPPoE.
+
 ## v1.26 — Cambio de plan real: se aplica en el router, no solo en el sistema
 - **`agenteMikrotik.js` (servidor interno)**: nuevo tipo de orden `CAMBIAR_PLAN` — ya estaba en la lista blanca de las rules desde el principio, faltaba el handler. Busca la configuración del plan nuevo para ese router, actualiza el perfil PPP del secret real, y si el cliente tenía una sesión activa la reconecta (RouterOS no aplica un profile nuevo a una sesión ya establecida hasta que se reconecta).
 - `modulo-clientes.js`: "Editar servicio" ahora dispara esa orden real al cambiar el plan, en vez de solo actualizar Firestore. Antes de encolarla, verifica que el plan elegido tenga configuración técnica para el router del servicio — si no la tiene, avisa al toque en vez de generar una orden condenada a fallar.

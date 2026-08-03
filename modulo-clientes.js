@@ -593,9 +593,38 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
   const [usuarioPPPoE, setUsuarioPPPoE] = useState(s.usuarioPPPoE ?? '');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
+  const [confirmandoBaja, setConfirmandoBaja] = useState(false);
+  const [dandoBaja, setDandoBaja] = useState(false);
   const planesActivos = usePlanesActivos();
 
   const planDesconocido = !nombresPlanes[s.planId];
+
+  const darDeBaja = async () => {
+    setDandoBaja(true);
+    setError(null);
+    try {
+      await db.collection('ordenes_mikrotik').add({
+        tipo: 'DAR_DE_BAJA',
+        servicioId: s.id,
+        clienteId: s.clienteId,
+        routerId: s.routerId,
+        parametros: {},
+        estado: 'pendiente',
+        pasosCompletados: [],
+        usuarioSolicitante: usuarioId,
+        fechaSolicitud: firebase.firestore.FieldValue.serverTimestamp(),
+        fechaEjecucion: null,
+        resultado: null,
+        error: null,
+      });
+      setConfirmandoBaja(false);
+    } catch (err) {
+      setError(err.code === 'permission-denied' ? 'Sin permiso para dar de baja este servicio.' : 'No fue posible dar de baja el servicio.');
+      console.error(err);
+    } finally {
+      setDandoBaja(false);
+    }
+  };
 
   const guardar = async () => {
     setGuardando(true);
@@ -661,11 +690,29 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
         </div>
         <div class="flex items-center gap-8">
           <span class="etiqueta-estado etiqueta-info">${s.estadoTecnico}</span>
-          <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setEditando(!editando)}>
-            ${editando ? 'Cerrar' : 'Editar'}
-          </button>
+          ${s.estadoTecnico !== 'baja' && html`
+            <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setEditando(!editando)}>
+              ${editando ? 'Cerrar' : 'Editar'}
+            </button>
+            <button class="btn btn-peligro" style=${{ padding: '4px 10px' }} onClick=${() => setConfirmandoBaja(true)}>
+              Dar de baja
+            </button>
+          `}
         </div>
       </div>
+
+      ${confirmandoBaja && html`
+        <div class="card" style=${{ marginTop: '10px', borderColor: 'var(--estado-suspendido)', background: 'rgba(220,38,38,0.05)' }}>
+          ${error && html`<div class="login-error" style=${{ marginBottom: '10px' }}>${error}</div>`}
+          <p style=${{ margin: '0 0 12px' }}>
+            <strong>¿Dar de baja este servicio?</strong> Se va a borrar el PPP Secret del router, liberar la IP <span class="mono">${s.ipAsignadaId ?? '—'}</span>, y no se puede deshacer con un clic — habría que crear el servicio de nuevo desde cero.
+          </p>
+          <div class="flex justify-between">
+            <button class="btn btn-secundario" onClick=${() => setConfirmandoBaja(false)} disabled=${dandoBaja}>Cancelar</button>
+            <button class="btn btn-peligro" onClick=${darDeBaja} disabled=${dandoBaja}>${dandoBaja ? 'Enviando…' : 'Sí, dar de baja'}</button>
+          </div>
+        </div>
+      `}
 
       ${editando && html`
         <div style=${{ marginTop: '10px', paddingTop: '10px', borderTop: '1px solid var(--color-borde)' }}>
