@@ -664,6 +664,7 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
 
 function CampoInfo({ etiqueta, valor }) {
   return html`
+    <div style=${{ minWidth: '160px' }}>
       <div class="texto-secundario" style=${{ marginBottom: '2px' }}>${etiqueta}</div>
       <div>${valor || '—'}</div>
     </div>

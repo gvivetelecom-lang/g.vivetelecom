@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.25 — Corrección: pantalla en blanco al abrir la ficha de un cliente
+- `modulo-clientes.js`: al restaurar `CampoInfo` en la v1.24, se perdió también el `<div>` contenedor que envolvía el contenido — quedó HTML mal formado (`h.push is not a function`, un error interno de `htm` ante tags sin cerrar correctamente), y como `CampoInfo` se usa en la sección "Información general" de **toda** ficha de cliente, rompía la pantalla completa apenas se abría cualquier cliente.
+- Se agrega un chequeo extra antes de armar cada ZIP: además de `node --check` (sintaxis JS), ahora se verifica que la cantidad de etiquetas `<div>`, `<form>`, `<table>`, etc. abiertas y cerradas coincida en los 14 archivos, para agarrar este tipo de error de edición antes de entregarlo.
+
 ## v1.24 — Editar servicio existente
 - `modulo-clientes.js`: cada servicio en la ficha del cliente ahora tiene un botón **"Editar"** — permite cambiar el plan asociado y el usuario PPPoE. Marca con una advertencia que esto solo actualiza el registro en el sistema (no reconfigura el router — el tipo de orden `CAMBIAR_PLAN` para el agente sigue pendiente).
 - Si el plan de un servicio fue borrado (por ejemplo con `eliminarPlanes.js`), ahora se muestra "(plan no encontrado — puede haber sido borrado)" en vez de solo el ID crudo, y el selector de edición lo deja elegir uno nuevo.
