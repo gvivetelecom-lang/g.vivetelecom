@@ -587,15 +587,26 @@ function usePlanesActivos() {
   return planes;
 }
 
+function useGruposCorteSimple() {
+  const [grupos, setGrupos] = useState([]);
+  useEffect(() => {
+    const unsub = db.collection('grupos_corte').onSnapshot((snap) => setGrupos(snap.docs.map((d) => ({ id: d.id, ...d.data() }))));
+    return unsub;
+  }, []);
+  return grupos;
+}
+
 function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
   const [editando, setEditando] = useState(false);
   const [planId, setPlanId] = useState(s.planId);
   const [usuarioPPPoE, setUsuarioPPPoE] = useState(s.usuarioPPPoE ?? '');
+  const [grupoCorteId, setGrupoCorteId] = useState(s.grupoCorteId ?? '');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
   const [confirmandoBaja, setConfirmandoBaja] = useState(false);
   const [dandoBaja, setDandoBaja] = useState(false);
   const planesActivos = usePlanesActivos();
+  const gruposCorte = useGruposCorteSimple();
 
   const planDesconocido = !nombresPlanes[s.planId];
 
@@ -659,12 +670,15 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
         });
       }
 
-      // El usuario PPPoE sí se corrige directo en el sistema — cambiar
-      // el nombre real del secret en el router es más delicado (afecta
-      // la config del cliente en su equipo) y queda fuera de este botón.
-      if (usuarioPPPoE.trim() !== (s.usuarioPPPoE ?? '')) {
+      // El usuario PPPoE y el grupo de corte se corrigen directo en el
+      // sistema — no requieren tocar el router.
+      const cambiosDirectos = {};
+      if (usuarioPPPoE.trim() !== (s.usuarioPPPoE ?? '')) cambiosDirectos.usuarioPPPoE = usuarioPPPoE.trim();
+      if (grupoCorteId !== (s.grupoCorteId ?? '')) cambiosDirectos.grupoCorteId = grupoCorteId || null;
+
+      if (Object.keys(cambiosDirectos).length > 0) {
         await db.collection('servicios').doc(s.id).update({
-          usuarioPPPoE: usuarioPPPoE.trim(),
+          ...cambiosDirectos,
           ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
         });
       }
@@ -731,6 +745,13 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
             <div class="campo" style=${{ flex: '1 1 200px', marginBottom: 0 }}>
               <label>Usuario PPPoE</label>
               <input type="text" value=${usuarioPPPoE} onInput=${(e) => setUsuarioPPPoE(e.target.value)} />
+            </div>
+            <div class="campo" style=${{ flex: '1 1 180px', marginBottom: 0 }}>
+              <label>Grupo de corte</label>
+              <select value=${grupoCorteId} onChange=${(e) => setGrupoCorteId(e.target.value)}>
+                <option value="">Sin asignar</option>
+                ${gruposCorte.map((g) => html`<option key=${g.id} value=${g.id}>${g.nombre}</option>`)}
+              </select>
             </div>
             <button class="btn btn-principal" onClick=${guardar} disabled=${guardando}>${guardando ? 'Guardando…' : 'Guardar'}</button>
           </div>

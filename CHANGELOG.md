@@ -2,6 +2,21 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.29 — Generación mensual de cuentas, automática (3 de 4 pendientes del negocio)
+Decisiones de negocio confirmadas: generación **automática** en fecha/hora configurable, **un solo día para todos los clientes** (no por grupo de corte).
+
+- **`generarCuentas.js` (servidor interno, nuevo — 5° proceso)**: corre en segundo plano, revisa cada minuto si coincide el día/hora configurado, y genera una cuenta por cliente agrupando todos sus servicios activos (separadas por moneda si hiciera falta). Evita duplicar si el cliente ya tiene cuenta ese período. También escucha un disparo manual para pruebas.
+- `modulo-cortes.js`: tarjeta "Generación mensual de cuentas" con día/hora, días hasta vencimiento/corte, botón **"Generar ahora"** (manual, para pruebas) y el resultado de la última corrida.
+- `firestore.rules`: nueva colección `configuracion` (solo superadmin/comercial pueden escribirla).
+- `package.json` / `iniciar-servidor.bat`: se agrega la dependencia `node-cron` y el 5° proceso al arranque.
+- **⚠️ Este ZIP toca los dos lados.** Instalá `node-cron` (`npm install`), reemplazá `firestore.rules` y `iniciar-servidor.bat`, agregá `generarCuentas.js`, redesplegá las rules, y arrancá el proceso nuevo.
+- Van 3 de 4 pendientes del negocio: Dar de baja, Vencimientos y cortes, Generación mensual (listos). Falta Modificar PPPoE.
+
+## v1.28 — Módulo de Vencimientos y cortes (2 de 4 pendientes del negocio)
+- `modulo-cortes.js` (nuevo): alta y edición de grupos de corte (día de vencimiento, días de gracia, día de corte), con la cantidad de servicios asignados a cada uno.
+- `modulo-clientes.js`: la edición de un servicio ahora incluye asignarle un grupo de corte directamente (además de por lote, que ya existía).
+- Van 2 de 4 pendientes del negocio: Dar de baja (listo), Vencimientos y cortes (listo), Generación mensual de cuentas, Modificar PPPoE.
+
 ## v1.27 — Dar de baja (1 de 4 pendientes del negocio)
 - **`agenteMikrotik.js` (servidor interno)**: nuevo tipo de orden `DAR_DE_BAJA` — borra el PPP Secret del router, desconecta la sesión activa si había, libera la IP (queda "disponible" de nuevo) y deja el registro en `ip_asignaciones` (inmutable, nunca se borra), y marca el servicio como `baja` en ambos estados (técnico y comercial).
 - `modulo-clientes.js`: botón **"Dar de baja"** por servicio, con confirmación explícita antes de ejecutar (es irreversible con un clic). Los servicios ya dados de baja dejan de mostrar los botones de acción.
