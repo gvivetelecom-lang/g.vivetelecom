@@ -2,6 +2,13 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.30 — Modificar PPPoE: cambio de IP en caliente (4 de 4 pendientes del negocio — completo)
+- **`agenteMikrotik.js` (servidor interno)**: nuevo tipo de orden `MODIFICAR_PPPOE` — cambia el `remote-address` del PPP Secret en el router, reconecta la sesión si estaba activa, libera la IP vieja (con registro en `ip_asignaciones`) y confirma la nueva. Todo sin pasar por suspender/dar de baja/alta de nuevo.
+- `modulo-clientes.js`: botón **"Cambiar IP"** por servicio, reutilizando el mismo buscador de IP con reserva transaccional que ya usa el alta — evita que dos operadores elijan la misma IP al mismo tiempo.
+- **⚠️ Este ZIP toca los dos lados.** Reemplazá `agenteMikrotik.js` en el servidor interno y reiniciá ese proceso.
+
+**Con esto se completan los 4 pendientes del negocio** que quedaron anotados: Dar de baja, Vencimientos y cortes, Generación mensual de cuentas, Modificar PPPoE. Los 7 tipos de orden documentados (alta, perfil PPP, suspender, rehabilitar, desconectar, cambiar plan, dar de baja, modificar PPPoE — son 8 en realidad) están construidos y con al menos una prueba real contra el Mk.
+
 ## v1.29 — Generación mensual de cuentas, automática (3 de 4 pendientes del negocio)
 Decisiones de negocio confirmadas: generación **automática** en fecha/hora configurable, **un solo día para todos los clientes** (no por grupo de corte).
 

@@ -605,10 +605,50 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
   const [error, setError] = useState(null);
   const [confirmandoBaja, setConfirmandoBaja] = useState(false);
   const [dandoBaja, setDandoBaja] = useState(false);
+  const [cambiandoIP, setCambiandoIP] = useState(false);
+  const [ipNueva, setIpNueva] = useState('');
+  const [enviandoIP, setEnviandoIP] = useState(false);
   const planesActivos = usePlanesActivos();
   const gruposCorte = useGruposCorteSimple();
 
   const planDesconocido = !nombresPlanes[s.planId];
+
+  const cambiarIP = async () => {
+    if (!ipNueva) { setError('Elegí una IP de la lista.'); return; }
+    setEnviandoIP(true);
+    setError(null);
+    try {
+      await reservarIP(ipNueva, { servicioId: s.id, clienteId: s.clienteId, usuarioId });
+
+      await db.collection('ordenes_mikrotik').add({
+        tipo: 'MODIFICAR_PPPOE',
+        servicioId: s.id,
+        clienteId: s.clienteId,
+        routerId: s.routerId,
+        parametros: { ipNueva },
+        estado: 'pendiente',
+        pasosCompletados: [],
+        usuarioSolicitante: usuarioId,
+        fechaSolicitud: firebase.firestore.FieldValue.serverTimestamp(),
+        fechaEjecucion: null,
+        resultado: null,
+        error: null,
+      });
+      setCambiandoIP(false);
+      setIpNueva('');
+    } catch (err) {
+      setError(
+        err.message === 'IP_NO_DISPONIBLE'
+          ? 'Esa IP fue tomada por otro operador justo ahora. Elegí otra.'
+          : err.code === 'permission-denied'
+          ? 'Sin permiso para esta acción.'
+          : 'No fue posible cambiar la IP.'
+      );
+      console.error(err);
+    } finally {
+      setEnviandoIP(false);
+    }
+  };
 
   const darDeBaja = async () => {
     setDandoBaja(true);
@@ -708,12 +748,29 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
             <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setEditando(!editando)}>
               ${editando ? 'Cerrar' : 'Editar'}
             </button>
+            <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setCambiandoIP(!cambiandoIP)}>
+              ${cambiandoIP ? 'Cerrar' : 'Cambiar IP'}
+            </button>
             <button class="btn btn-peligro" style=${{ padding: '4px 10px' }} onClick=${() => setConfirmandoBaja(true)}>
               Dar de baja
             </button>
           `}
         </div>
       </div>
+
+      ${cambiandoIP && html`
+        <div class="card" style=${{ marginTop: '10px' }}>
+          <p class="texto-secundario" style=${{ marginTop: 0 }}>
+            IP actual: <span class="mono">${s.ipAsignadaId ?? '—'}</span>. Elegí la nueva — el agente actualiza el router y libera la IP vieja automáticamente al confirmar.
+          </p>
+          ${error && html`<div class="login-error">${error}</div>`}
+          <${SelectorIP} routerId=${s.routerId} onSeleccionar=${setIpNueva} />
+          <div class="flex justify-between" style=${{ marginTop: '12px' }}>
+            <button class="btn btn-secundario" onClick=${() => setCambiandoIP(false)} disabled=${enviandoIP}>Cancelar</button>
+            <button class="btn btn-principal" onClick=${cambiarIP} disabled=${enviandoIP || !ipNueva}>${enviandoIP ? 'Aplicando…' : 'Confirmar cambio de IP'}</button>
+          </div>
+        </div>
+      `}
 
       ${confirmandoBaja && html`
         <div class="card" style=${{ marginTop: '10px', borderColor: 'var(--estado-suspendido)', background: 'rgba(220,38,38,0.05)' }}>
