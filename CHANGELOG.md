@@ -2,6 +2,9 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.31 — Corrección: Direcciones IP mostraba el ID crudo del cliente
+- `modulo-ips.js`: la columna "Cliente" en la tabla de Direcciones IP mostraba el ID de Firestore en vez del nombre. Se agrega la resolución de nombres, mismo patrón ya usado en Clientes/Servicios/Planes.
+
 ## v1.30 — Modificar PPPoE: cambio de IP en caliente (4 de 4 pendientes del negocio — completo)
 - **`agenteMikrotik.js` (servidor interno)**: nuevo tipo de orden `MODIFICAR_PPPOE` — cambia el `remote-address` del PPP Secret en el router, reconecta la sesión si estaba activa, libera la IP vieja (con registro en `ip_asignaciones`) y confirma la nueva. Todo sin pasar por suspender/dar de baja/alta de nuevo.
 - `modulo-clientes.js`: botón **"Cambiar IP"** por servicio, reutilizando el mismo buscador de IP con reserva transaccional que ya usa el alta — evita que dos operadores elijan la misma IP al mismo tiempo.

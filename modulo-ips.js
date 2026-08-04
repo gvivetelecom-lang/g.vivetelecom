@@ -225,11 +225,25 @@ function useInventarioIPs({ routerFiltro, estadoFiltro }) {
   return { ips, cargando };
 }
 
+function useNombresClientes() {
+  const [clientes, setClientes] = useState({});
+  useEffect(() => {
+    const unsub = db.collection('clientes').onSnapshot((snap) => {
+      const mapa = {};
+      snap.docs.forEach((d) => { mapa[d.id] = d.data().nombre; });
+      setClientes(mapa);
+    });
+    return unsub;
+  }, []);
+  return clientes;
+}
+
 function TablaIPs() {
   const [routerFiltro, setRouterFiltro] = useState('todos');
   const [estadoFiltro, setEstadoFiltro] = useState('todos');
   const { ips, cargando } = useInventarioIPs({ routerFiltro, estadoFiltro });
   const [routers, setRouters] = useState([]);
+  const nombresClientes = useNombresClientes();
 
   useEffect(() => {
     const unsub = db.collection('routers').onSnapshot((snap) => {
@@ -282,7 +296,7 @@ function TablaIPs() {
                         <td style=${estiloTd} class="mono">${ipRow.ip}</td>
                         <td style=${estiloTd} class="texto-secundario">${ipRow.routerId}</td>
                         <td style=${estiloTd}><${EtiquetaEstadoIP} estado=${ipRow.estado} /></td>
-                        <td style=${estiloTd} class="texto-secundario">${ipRow.clienteId ?? '—'}</td>
+                        <td style=${estiloTd} class="texto-secundario">${ipRow.clienteId ? (nombresClientes[ipRow.clienteId] ?? ipRow.clienteId) : '—'}</td>
                         <td style=${estiloTd} class="texto-secundario">
                           ${ipRow.fechaAsignacion ? new Date(ipRow.fechaAsignacion.seconds * 1000).toLocaleDateString('es-PY') : '—'}
                         </td>
