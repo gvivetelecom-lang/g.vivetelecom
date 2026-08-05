@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.32 — Vistas globales de Cuentas y Pagos
+- `modulo-pagos.js`: los ítems del menú "Cuentas" y "Pagos" nunca estaban conectados a nada (mostraban "en construcción") — la funcionalidad real solo vivía dentro de la ficha del cliente. Se agregan `ModuloCuentasGlobal` y `ModuloPagosGlobal`: listado con filtro por estado, entre todos los clientes, que lleva a la ficha correspondiente al hacer clic. Las acciones (nueva cuenta, registrar pago) se siguen haciendo desde ahí, como corresponde con un cliente ya elegido.
+- (Servidor interno, entregado aparte) `monitorRouters.js`: nuevo 6° proceso que consulta CPU/memoria/uptime/sesiones/latencia de cada router cada 60s — el módulo de Routers mostraba todo en "—" porque nada escribía esos datos.
+
 ## v1.31 — Corrección: Direcciones IP mostraba el ID crudo del cliente
 - `modulo-ips.js`: la columna "Cliente" en la tabla de Direcciones IP mostraba el ID de Firestore en vez del nombre. Se agrega la resolución de nombres, mismo patrón ya usado en Clientes/Servicios/Planes.
 

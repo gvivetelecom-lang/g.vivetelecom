@@ -497,4 +497,196 @@ function FilaCuenta({ cuenta: c }) {
   `;
 }
 
+
+// ---------------------------------------------------------------------
+// Vistas globales — Cuentas y Pagos como items propios del menu
+// (distintos de la tarjeta dentro de la ficha del cliente, que sigue
+// funcionando igual). Solo lectura + navegacion al cliente, las
+// acciones (registrar pago, nueva cuenta) siguen viviendo en la ficha.
+// ---------------------------------------------------------------------
+
+function useNombresClientesGlobal() {
+  const [clientes, setClientes] = useState({});
+  useEffect(() => {
+    const unsub = db.collection('clientes').onSnapshot((snap) => {
+      const mapa = {};
+      snap.docs.forEach((d) => { mapa[d.id] = d.data().nombre; });
+      setClientes(mapa);
+    });
+    return unsub;
+  }, []);
+  return clientes;
+}
+
+function useCuentasGlobal(estadoFiltro) {
+  const [cuentas, setCuentas] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setCargando(true);
+    setError(null);
+    let ref = db.collection('cuentas').orderBy('fechaEmision', 'desc').limit(100);
+    if (estadoFiltro !== 'todos') {
+      ref = db.collection('cuentas').where('estado', '==', estadoFiltro).orderBy('fechaEmision', 'desc').limit(100);
+    }
+
+    const unsub = ref.onSnapshot(
+      (snap) => { setCuentas(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); setCargando(false); },
+      (err) => {
+        console.error(err);
+        setError(err.code === 'failed-precondition' ? 'Falta crear un indice - revisa la consola del navegador (F12) por el link.' : 'No fue posible cargar las cuentas.');
+        setCargando(false);
+      }
+    );
+    return unsub;
+  }, [estadoFiltro]);
+
+  return { cuentas, cargando, error };
+}
+
+function ModuloCuentasGlobal({ navegarACliente }) {
+  const [estadoFiltro, setEstadoFiltro] = useState('todos');
+  const { cuentas, cargando, error } = useCuentasGlobal(estadoFiltro);
+  const nombresClientes = useNombresClientesGlobal();
+
+  return html`
+    <div>
+      <div class="flex items-center justify-between" style=${{ marginBottom: '16px' }}>
+        <h1 style=${{ fontSize: 'var(--texto-titulo-principal)', margin: 0 }}>Cuentas</h1>
+        <select value=${estadoFiltro} onChange=${(e) => setEstadoFiltro(e.target.value)} style=${{ maxWidth: '200px' }}>
+          <option value="todos">Todos los estados</option>
+          <option value="pendiente">Pendiente</option>
+          <option value="parcial">Pago parcial</option>
+          <option value="pagada">Pagada</option>
+          <option value="vencida">Vencida</option>
+          <option value="anulada">Anulada</option>
+          <option value="exonerada">Exonerada</option>
+        </select>
+      </div>
+
+      ${error && html`<div class="login-error" style=${{ marginBottom: '16px' }}>${error}</div>`}
+
+      <div class="card" style=${{ padding: 0 }}>
+        ${cargando
+          ? html`<div style=${{ padding: '32px', textAlign: 'center' }} class="texto-secundario">Cargando cuentas...</div>`
+          : cuentas.length === 0
+          ? html`<div style=${{ padding: '32px', textAlign: 'center' }} class="texto-secundario">No hay cuentas con este filtro.</div>`
+          : html`
+              <table style=${{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style=${{ borderBottom: '1px solid var(--color-borde)', textAlign: 'left' }}>
+                    <th style=${estiloTh}>Cliente</th>
+                    <th style=${estiloTh}>Periodo</th>
+                    <th style=${estiloTh}>Total</th>
+                    <th style=${estiloTh}>Saldo</th>
+                    <th style=${estiloTh}>Vencimiento</th>
+                    <th style=${estiloTh}>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${cuentas.map(
+                    (c) => html`
+                      <tr key=${c.id} style=${{ borderBottom: '1px solid var(--color-borde)', cursor: 'pointer' }} onClick=${() => navegarACliente(c.clienteId)}>
+                        <td style=${estiloTd}>${nombresClientes[c.clienteId] ?? c.clienteId}</td>
+                        <td style=${estiloTd}>${c.periodo}</td>
+                        <td style=${estiloTd}>${formatoMoneda(c.total, c.moneda)}</td>
+                        <td style=${estiloTd} style=${{ fontWeight: 600 }}>${formatoMoneda(c.saldo, c.moneda)}</td>
+                        <td style=${estiloTd} class="texto-secundario">${c.fechaVencimiento ? new Date(c.fechaVencimiento.seconds * 1000).toLocaleDateString('es-PY') : '-'}</td>
+                        <td style=${estiloTd}><${EtiquetaEstadoCuenta} estado=${c.estado} /></td>
+                      </tr>
+                    `
+                  )}
+                </tbody>
+              </table>
+            `}
+      </div>
+    </div>
+  `;
+}
+
+function usePagosGlobal(estadoFiltro) {
+  const [pagos, setPagos] = useState([]);
+  const [cargando, setCargando] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setCargando(true);
+    setError(null);
+    let ref = db.collection('pagos').orderBy('fechaPago', 'desc').limit(100);
+    if (estadoFiltro !== 'todos') {
+      ref = db.collection('pagos').where('estado', '==', estadoFiltro).orderBy('fechaPago', 'desc').limit(100);
+    }
+
+    const unsub = ref.onSnapshot(
+      (snap) => { setPagos(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); setCargando(false); },
+      (err) => {
+        console.error(err);
+        setError(err.code === 'failed-precondition' ? 'Falta crear un indice - revisa la consola del navegador (F12) por el link.' : 'No fue posible cargar los pagos.');
+        setCargando(false);
+      }
+    );
+    return unsub;
+  }, [estadoFiltro]);
+
+  return { pagos, cargando, error };
+}
+
+function ModuloPagosGlobal({ navegarACliente }) {
+  const [estadoFiltro, setEstadoFiltro] = useState('todos');
+  const { pagos, cargando, error } = usePagosGlobal(estadoFiltro);
+  const nombresClientes = useNombresClientesGlobal();
+
+  return html`
+    <div>
+      <div class="flex items-center justify-between" style=${{ marginBottom: '16px' }}>
+        <h1 style=${{ fontSize: 'var(--texto-titulo-principal)', margin: 0 }}>Pagos</h1>
+        <select value=${estadoFiltro} onChange=${(e) => setEstadoFiltro(e.target.value)} style=${{ maxWidth: '200px' }}>
+          <option value="todos">Todos los estados</option>
+          <option value="confirmado">Confirmado</option>
+          <option value="pendiente_conciliacion">Pendiente de conciliacion</option>
+          <option value="anulado">Anulado</option>
+        </select>
+      </div>
+
+      ${error && html`<div class="login-error" style=${{ marginBottom: '16px' }}>${error}</div>`}
+
+      <div class="card" style=${{ padding: 0 }}>
+        ${cargando
+          ? html`<div style=${{ padding: '32px', textAlign: 'center' }} class="texto-secundario">Cargando pagos...</div>`
+          : pagos.length === 0
+          ? html`<div style=${{ padding: '32px', textAlign: 'center' }} class="texto-secundario">No hay pagos con este filtro.</div>`
+          : html`
+              <table style=${{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style=${{ borderBottom: '1px solid var(--color-borde)', textAlign: 'left' }}>
+                    <th style=${estiloTh}>Cliente</th>
+                    <th style=${estiloTh}>Fecha</th>
+                    <th style=${estiloTh}>Importe</th>
+                    <th style=${estiloTh}>Medio</th>
+                    <th style=${estiloTh}>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${pagos.map(
+                    (p) => html`
+                      <tr key=${p.id} style=${{ borderBottom: '1px solid var(--color-borde)', cursor: 'pointer' }} onClick=${() => navegarACliente(p.clienteId)}>
+                        <td style=${estiloTd}>${nombresClientes[p.clienteId] ?? p.clienteId}</td>
+                        <td style=${estiloTd} class="texto-secundario">${p.fechaPago ? new Date(p.fechaPago.seconds * 1000).toLocaleDateString('es-PY') : '-'}</td>
+                        <td style=${estiloTd} style=${{ fontWeight: 600 }}>${formatoMoneda(p.importe, p.moneda)}</td>
+                        <td style=${estiloTd} class="texto-secundario">${p.medio}</td>
+                        <td style=${estiloTd}>
+                          <span class="etiqueta-estado ${p.estado === 'confirmado' ? 'etiqueta-activo' : p.estado === 'anulado' ? 'etiqueta-suspendido' : 'etiqueta-pendiente'}">${p.estado}</span>
+                        </td>
+                      </tr>
+                    `
+                  )}
+                </tbody>
+              </table>
+            `}
+      </div>
+    </div>
+  `;
+}
+
 // estiloTh y estiloTd ya están declarados en app.js (compartidos entre módulos)
