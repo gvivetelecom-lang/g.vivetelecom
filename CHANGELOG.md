@@ -2,6 +2,10 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.33 — Corrección: alertas de órdenes fallidas ya resueltas seguían apareciendo
+- `modulo-alertas.js`: una orden en estado "error" se seguía mostrando en Alertas para siempre, aunque un reintento posterior para el mismo servicio se hubiera completado bien. Ahora, antes de listar la alerta, chequea si esa orden sigue siendo la más reciente para su servicio — si ya hay una más nueva exitosa, la omite.
+- Reutiliza el mismo índice compuesto (`servicioId` + `fechaSolicitud`) que ya usa la ficha del cliente, así que no debería pedir crear uno nuevo.
+
 ## v1.32 — Vistas globales de Cuentas y Pagos
 - `modulo-pagos.js`: los ítems del menú "Cuentas" y "Pagos" nunca estaban conectados a nada (mostraban "en construcción") — la funcionalidad real solo vivía dentro de la ficha del cliente. Se agregan `ModuloCuentasGlobal` y `ModuloPagosGlobal`: listado con filtro por estado, entre todos los clientes, que lleva a la ficha correspondiente al hacer clic. Las acciones (nueva cuenta, registrar pago) se siguen haciendo desde ahí, como corresponde con un cliente ya elegido.
 - (Servidor interno, entregado aparte) `monitorRouters.js`: nuevo 6° proceso que consulta CPU/memoria/uptime/sesiones/latencia de cada router cada 60s — el módulo de Routers mostraba todo en "—" porque nada escribía esos datos.

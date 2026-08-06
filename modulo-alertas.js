@@ -35,13 +35,35 @@ async function detectarRoutersSinRespuesta() {
 
 async function detectarOrdenesConError() {
   const snap = await db.collection('ordenes_mikrotik').where('estado', '==', 'error').limit(30).get();
-  return snap.docs.map((d) => ({
-    id: `orden-${d.id}`,
-    severidad: 'advertencia',
-    titulo: `Orden "${d.data().tipo}" falló`,
-    detalle: d.data().error ?? 'Sin detalle de error',
-    ruta: null,
-  }));
+
+  const candidatas = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const alertas = [];
+
+  for (const orden of candidatas) {
+    // Si ya se reintentó y una orden posterior para el mismo servicio
+    // se completó bien, esta queda obsoleta — no tiene sentido seguir
+    // alertando sobre algo que ya se resolvió.
+    if (orden.servicioId) {
+      const masReciente = await db.collection('ordenes_mikrotik')
+        .where('servicioId', '==', orden.servicioId)
+        .orderBy('fechaSolicitud', 'desc')
+        .limit(1)
+        .get();
+
+      const ultimaEstado = masReciente.docs[0]?.data()?.estado;
+      if (ultimaEstado && ultimaEstado !== 'error') continue; // ya se resolvió, se omite
+    }
+
+    alertas.push({
+      id: `orden-${orden.id}`,
+      severidad: 'advertencia',
+      titulo: `Orden "${orden.tipo}" falló`,
+      detalle: orden.error ?? 'Sin detalle de error',
+      ruta: null,
+    });
+  }
+
+  return alertas;
 }
 
 async function detectarIPsEstancadas() {
