@@ -239,9 +239,31 @@ function periodoActual() {
   return `${ahora.getFullYear()}-${String(ahora.getMonth() + 1).padStart(2, '0')}`;
 }
 
+function useServiciosAdicionalesFacturables(clienteId) {
+  const [servicios, setServicios] = useState([]);
+  useEffect(() => {
+    const unsub = db.collection('servicios_adicionales')
+      .where('clienteId', '==', clienteId)
+      .where('estado', '==', 'activo')
+      .onSnapshot(
+        (snap) => setServicios(
+          snap.docs
+            .map((d) => ({ id: d.id, ...d.data() }))
+            // Los "único" ya facturados no se ofrecen de nuevo
+            .filter((s) => s.tipo === 'recurrente' || !s.facturado)
+        ),
+        (err) => console.error(err)
+      );
+    return unsub;
+  }, [clienteId]);
+  return servicios;
+}
+
 function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar }) {
   const servicios = useServiciosCliente(clienteId);
+  const adicionales = useServiciosAdicionalesFacturables(clienteId);
   const [seleccionados, setSeleccionados] = useState(new Set());
+  const [adicionalesSeleccionados, setAdicionalesSeleccionados] = useState(new Set());
   const [planesPorId, setPlanesPorId] = useState({}); // planId -> plan
   const [periodo, setPeriodo] = useState(periodoActual());
   const [fechaVencimiento, setFechaVencimiento] = useState(hoyMasDias(10));
@@ -269,10 +291,24 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
     });
   };
 
-  const lineas = servicios
+  const alternarAdicional = (id) => {
+    setAdicionalesSeleccionados((prev) => {
+      const nuevo = new Set(prev);
+      nuevo.has(id) ? nuevo.delete(id) : nuevo.add(id);
+      return nuevo;
+    });
+  };
+
+  const lineasInternet = servicios
     .filter((s) => seleccionados.has(s.id))
-    .map((s) => ({ servicio: s, plan: planesPorId[s.planId] }))
+    .map((s) => ({ origen: 'internet', referencia: s, plan: planesPorId[s.planId] }))
     .filter((l) => l.plan);
+
+  const lineasAdicionales = adicionales
+    .filter((a) => adicionalesSeleccionados.has(a.id))
+    .map((a) => ({ origen: 'adicional', referencia: a, plan: { nombre: a.nombre, precio: a.precio, moneda: a.moneda, impuestos: 0 } }));
+
+  const lineas = [...lineasInternet, ...lineasAdicionales];
 
   const monedas = new Set(lineas.map((l) => l.plan.moneda));
   const monedaMixta = monedas.size > 1;
@@ -285,21 +321,22 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
   const confirmar = async (e) => {
     e.preventDefault();
     if (lineas.length === 0) { setError('Seleccioná al menos un servicio.'); return; }
-    if (monedaMixta) { setError('Los servicios elegidos tienen planes en monedas distintas — no se pueden combinar en la misma cuenta.'); return; }
+    if (monedaMixta) { setError('Los servicios elegidos tienen precios en monedas distintas — no se pueden combinar en la misma cuenta.'); return; }
 
     setEnviando(true);
     setError(null);
     try {
       const lineasParaGuardar = lineas.map((l) => ({
-        servicioId: l.servicio.id,
-        planId: l.plan.id,
-        planNombreSnapshot: l.plan.nombre,
+        origen: l.origen,
+        referenciaId: l.referencia.id,
+        nombreSnapshot: l.origen === 'internet' ? l.plan.nombre : l.referencia.nombre,
         importeSnapshot: l.plan.precio,
       }));
 
       await db.collection('cuentas').add({
         clienteId,
-        servicioIds: lineasParaGuardar.map((l) => l.servicioId),
+        servicioIds: lineasInternet.map((l) => l.referencia.id), // para array-contains del internet (suspensión/rehabilitación)
+        serviciosAdicionalesIds: lineasAdicionales.map((l) => l.referencia.id),
         lineas: lineasParaGuardar,
         periodo,
         fechaEmision: firebase.firestore.FieldValue.serverTimestamp(),
@@ -315,6 +352,13 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
         estado: 'pendiente',
         ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
       });
+
+      // Los "único" ya incluidos se marcan facturados para no ofrecerlos de nuevo
+      const marcasFacturado = lineasAdicionales
+        .filter((l) => l.referencia.tipo === 'unico')
+        .map((l) => db.collection('servicios_adicionales').doc(l.referencia.id).update({ facturado: true }));
+      await Promise.all(marcasFacturado);
+
       onCompletado();
     } catch (err) {
       setError(err.code === 'permission-denied' ? 'Sin permiso para crear cuentas.' : 'No fue posible crear la cuenta.');
@@ -328,16 +372,16 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
     <div class="card" style=${{ maxWidth: '520px', marginBottom: '16px' }}>
       <div class="card-titulo">Nueva cuenta (manual)</div>
       <p class="texto-secundario" style=${{ marginTop: '-8px' }}>
-        Podés incluir uno o varios servicios en la misma cuenta — útil para clientes con más de una conexión.
+        Podés incluir servicios de internet y servicios adicionales en la misma cuenta.
       </p>
 
       ${error && html`<div class="login-error">${error}</div>`}
 
       <form onSubmit=${confirmar}>
         <div class="campo">
-          <label>Servicios a incluir</label>
+          <label>Internet</label>
           ${servicios.length === 0
-            ? html`<p class="texto-secundario">Este cliente no tiene servicios cargados.</p>`
+            ? html`<p class="texto-secundario">Este cliente no tiene servicios de internet.</p>`
             : servicios.map((s) => {
                 const plan = planesPorId[s.planId];
                 return html`
@@ -350,7 +394,20 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
               })}
         </div>
 
-        ${monedaMixta && html`<div class="login-error">Los servicios elegidos tienen planes en monedas distintas — elegí solo servicios con la misma moneda por cuenta.</div>`}
+        ${adicionales.length > 0 && html`
+          <div class="campo">
+            <label>Servicios adicionales</label>
+            ${adicionales.map((a) => html`
+              <label key=${a.id} class="flex items-center gap-8" style=${{ fontWeight: 400, padding: '6px 0', cursor: 'pointer' }}>
+                <input type="checkbox" checked=${adicionalesSeleccionados.has(a.id)} onChange=${() => alternarAdicional(a.id)} style=${{ width: 'auto' }} />
+                <span>${a.nombre}</span>
+                <span class="texto-secundario">— ${a.precio} ${a.moneda} (${a.tipo === 'unico' ? 'único' : 'mensual'})</span>
+              </label>
+            `)}
+          </div>
+        `}
+
+        ${monedaMixta && html`<div class="login-error">Lo elegido tiene precios en monedas distintas — no se pueden combinar en la misma cuenta.</div>`}
 
         <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
           <div class="campo" style=${{ flex: '1 1 120px' }}>
@@ -485,8 +542,8 @@ function FilaCuenta({ cuenta: c }) {
         <tr style=${{ borderBottom: '1px solid var(--color-borde)' }}>
           <td colspan="6" style=${{ padding: '0 16px 12px 40px', background: 'var(--color-fondo)' }}>
             ${lineas.map((l) => html`
-              <div key=${l.servicioId} class="flex items-center justify-between" style=${{ padding: '4px 0' }}>
-                <span class="texto-secundario">${l.planNombreSnapshot}</span>
+              <div key=${l.referenciaId ?? l.servicioId} class="flex items-center justify-between" style=${{ padding: '4px 0' }}>
+                <span class="texto-secundario">${l.nombreSnapshot ?? l.planNombreSnapshot}</span>
                 <span class="mono texto-secundario">${formatoMoneda(l.importeSnapshot, c.moneda)}</span>
               </div>
             `)}

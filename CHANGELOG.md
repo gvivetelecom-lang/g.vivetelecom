@@ -2,6 +2,16 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.34 — Servicios adicionales (cableado, cámaras, correo, etc. — no internet)
+Evolución del sistema: nueva categoría de servicios que se le facturan al cliente pero no involucran al MikroTik, con seguimiento operativo (¿ya se hizo o falta?) separado del estado de facturación.
+
+- `modulo-servicios-adicionales.js` (nuevo): alta con cotización manual (sin catálogo fijo), seguimiento operativo (pendiente → programado → en progreso → completado), tarjeta dentro de la ficha del cliente, y un tablero global ("Servicios adicionales" en el menú) para ver de un vistazo qué trabajos faltan entre todos los clientes.
+- `modulo-pagos.js`: "Nueva cuenta" ahora deja incluir servicios adicionales junto con internet en la misma factura. El modelo de `cuentas.lineas[]` se generaliza (`origen: "internet" | "adicional"`), con compatibilidad hacia las cuentas creadas antes de este cambio.
+- **`generarCuentas.js` (servidor interno)**: la generación automática mensual ahora también suma los servicios adicionales activos — los `recurrente` todos los meses, los `unico` una sola vez.
+- **`firestore.rules`**: nueva colección `servicios_adicionales` — comercial/superadmin cargan precio y datos, los roles técnicos pueden avanzar el estado operativo sin tocar el precio.
+- No hay suspensión automática de un servicio adicional por separado: si el cliente no paga, se corta el internet (a nivel cliente, como ya funcionaba), el trabajo ya hecho no se "descorta".
+- **⚠️ Este ZIP toca los dos lados.** Reemplazá `firestore.rules` y `generarCuentas.js` en el servidor interno, redesplegá las rules, y reiniciá ese proceso.
+
 ## v1.33 — Corrección: alertas de órdenes fallidas ya resueltas seguían apareciendo
 - `modulo-alertas.js`: una orden en estado "error" se seguía mostrando en Alertas para siempre, aunque un reintento posterior para el mismo servicio se hubiera completado bien. Ahora, antes de listar la alerta, chequea si esa orden sigue siendo la más reciente para su servicio — si ya hay una más nueva exitosa, la omite.
 - Reutiliza el mismo índice compuesto (`servicioId` + `fechaSolicitud`) que ya usa la ficha del cliente, así que no debería pedir crear uno nuevo.

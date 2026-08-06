@@ -6,7 +6,7 @@ const { useState, useEffect, useMemo } = React;
 
 // Versión del sistema — se actualiza en cada entrega, coincide con el
 // CHANGELOG.md del repositorio.
-const VERSION_SISTEMA = 'v1.33';
+const VERSION_SISTEMA = 'v1.34';
 
 // Cuenta documentos de una consulta de forma segura. Usa la
 // agregación count() del servidor cuando está disponible (más rápida
@@ -51,6 +51,7 @@ const MENU = [
   { id: 'pagos', icono: 'fa-money-bill', label: 'Pagos' },
   { id: 'cortes', icono: 'fa-calendar-days', label: 'Vencimientos y cortes' },
   { id: 'lotes', icono: 'fa-layer-group', label: 'Operaciones por lote' },
+  { id: 'adicionales', icono: 'fa-toolbox', label: 'Servicios adicionales' },
   { id: 'alertas', icono: 'fa-triangle-exclamation', label: 'Alertas' },
   { id: 'auditoria', icono: 'fa-clock-rotate-left', label: 'Historial y auditoría' },
   { id: 'usuarios', icono: 'fa-user-shield', label: 'Usuarios y permisos', permiso: 'usuarios.ver' },
@@ -296,6 +297,8 @@ function AppShell({ usuario, rol }) {
           ? html`<${ModuloAuditoria} />`
           : ruta === 'lotes'
           ? html`<${ModuloLotes} usuarioId=${usuario.uid} />`
+          : ruta === 'adicionales'
+          ? html`<${ModuloServiciosAdicionales} usuarioId=${usuario.uid} navegarACliente=${navegarACliente} />`
           : ruta === 'cortes'
           ? html`<${ModuloCortes} usuarioId=${usuario.uid} navegarA=${setRuta} />`
           : html`<${PantallaEnConstruccion} titulo=${itemActivo?.label ?? ruta} />`}

@@ -475,6 +475,8 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
         <${TablaCuentasCliente} clienteId=${clienteId} usuarioId=${usuarioId} />
       </div>
 
+      <${TarjetaServiciosAdicionales} clienteId=${clienteId} usuarioId=${usuarioId} />
+
       <div class="card">
         <div class="flex items-center justify-between" style=${{ marginBottom: '16px' }}>
           <div class="card-titulo" style=${{ margin: 0 }}>Servicios (${servicios.length})</div>
