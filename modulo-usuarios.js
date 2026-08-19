@@ -150,6 +150,8 @@ function FilaUsuario({ usuario, roles, esUsuarioActual }) {
   const [editando, setEditando] = useState(false);
   const [rol, setRol] = useState(usuario.rol);
   const [guardando, setGuardando] = useState(false);
+  const [enviandoReset, setEnviandoReset] = useState(false);
+  const [resetEnviado, setResetEnviado] = useState(false);
 
   const guardar = async () => {
     setGuardando(true);
@@ -166,6 +168,23 @@ function FilaUsuario({ usuario, roles, esUsuarioActual }) {
   const alternarActivo = async () => {
     if (esUsuarioActual) return; // no te podés desactivar a vos mismo por error
     await db.collection('usuarios').doc(usuario.id).update({ activo: !usuario.activo });
+  };
+
+  const enviarResetContrasena = async () => {
+    setEnviandoReset(true);
+    setResetEnviado(false);
+    try {
+      // No hace falta tocar el servidor interno ni saber la contraseña
+      // actual — Firebase Auth le manda al usuario un link para que la
+      // cambie él mismo. Es lo mismo aunque quien lo dispare sea otro
+      // usuario logueado (el admin), no hace falta estar deslogueado.
+      await auth.sendPasswordResetEmail(usuario.email);
+      setResetEnviado(true);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setEnviandoReset(false);
+    }
   };
 
   return html`
@@ -187,7 +206,7 @@ function FilaUsuario({ usuario, roles, esUsuarioActual }) {
         </span>
       </td>
       <td style=${estiloTd}>
-        <div class="flex gap-8">
+        <div class="flex gap-8" style=${{ flexWrap: 'wrap' }}>
           ${editando
             ? html`
                 <button class="btn btn-positivo" style=${{ padding: '4px 10px' }} onClick=${guardar} disabled=${guardando}>Guardar</button>
@@ -203,6 +222,14 @@ function FilaUsuario({ usuario, roles, esUsuarioActual }) {
                   title=${esUsuarioActual ? 'No podés desactivarte a vos mismo' : ''}
                 >
                   ${usuario.activo ? 'Desactivar' : 'Activar'}
+                </button>
+                <button
+                  class="btn btn-secundario"
+                  style=${{ padding: '4px 10px' }}
+                  onClick=${enviarResetContrasena}
+                  disabled=${enviandoReset}
+                >
+                  ${enviandoReset ? 'Enviando…' : resetEnviado ? '✓ Enviado' : 'Restablecer contraseña'}
                 </button>
               `}
         </div>

@@ -2,6 +2,9 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.35 — Restablecer contraseña desde Usuarios y permisos
+- `modulo-usuarios.js`: nuevo botón **"Restablecer contraseña"** por usuario — le manda un correo de restablecimiento vía Firebase Auth (`sendPasswordResetEmail`). No requiere tocar el servidor interno ni que el admin conozca o defina la contraseña nueva; el propio usuario la elige siguiendo el link del correo.
+
 ## v1.34 — Servicios adicionales (cableado, cámaras, correo, etc. — no internet)
 Evolución del sistema: nueva categoría de servicios que se le facturan al cliente pero no involucran al MikroTik, con seguimiento operativo (¿ya se hizo o falta?) separado del estado de facturación.
 
