@@ -18,6 +18,7 @@ function AltaServicioPPPoE({ clienteId, clienteNombre, onCompletado, onCancelar,
   const [routerId, setRouterId] = useState('');
   const [ipSeleccionada, setIpSeleccionada] = useState('');
   const [usuarioPPPoE, setUsuarioPPPoE] = useState('');
+  const [onuSerial, setOnuSerial] = useState('');
   const [enviando, setEnviando] = useState(false);
   const [error, setError] = useState(null);
 
@@ -61,6 +62,7 @@ function AltaServicioPPPoE({ clienteId, clienteNombre, onCompletado, onCancelar,
         estadoTecnico: 'pendiente_config',
         estadoComercial: 'activo',
         usuarioPPPoE: usuarioPPPoE.trim(),
+        onuSerial: onuSerial.trim() || null,
         passwordPPPoE_ref: null, // el agente genera y guarda la referencia real
         perfilPPP: null,
         callerIdMac: null,
@@ -142,6 +144,11 @@ function AltaServicioPPPoE({ clienteId, clienteNombre, onCompletado, onCancelar,
             <div class="ayuda">La contraseña se genera automáticamente y nunca queda visible en el navegador.</div>
           </div>
 
+          <div class="campo">
+            <label>N° de serie de la ONU (opcional)</label>
+            <input type="text" value=${onuSerial} onInput=${(e) => setOnuSerial(e.target.value)} placeholder="ej: HWTC12345678" class="mono" />
+          </div>
+
           <div class="flex justify-between">
             <button class="btn btn-secundario" onClick=${onCancelar}>Cancelar</button>
             <button class="btn btn-principal" onClick=${avanzarAPaso2}>Continuar</button>
@@ -170,6 +177,7 @@ function AltaServicioPPPoE({ clienteId, clienteNombre, onCompletado, onCancelar,
             <li>Plan: <strong>${planSeleccionado?.nombre}</strong></li>
             <li>Router: <strong>${routerSeleccionado?.nombre}</strong></li>
             <li>Usuario PPPoE: <span class="mono">${usuarioPPPoE}</span></li>
+            ${onuSerial && html`<li>S/N ONU: <span class="mono">${onuSerial}</span></li>`}
             <li>IP: <span class="mono">${ipSeleccionada}</span></li>
           </ul>
           <p class="texto-secundario">Se generará una orden para que el agente interno configure el router. El servicio quedará como "pendiente de configuración" hasta que se confirme el resultado.</p>

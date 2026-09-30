@@ -2,6 +2,17 @@
 
 Registro de qué cambió en cada entrega, para saber siempre qué versión tenés instalada.
 
+## v1.37 — S/N de ONU + ver/cambiar contraseña PPPoE (con control de acceso)
+- `modulo-alta-servicio.js`: nuevo campo opcional "N° de serie de la ONU" en el alta de servicio.
+- `modulo-clientes.js`: el mismo campo se puede editar después desde el servicio. Se agrega **"Contraseña PPPoE"** — botón "Ver contraseña" (le pide al agente que la exponga temporalmente) y "Generar contraseña nueva" (la cambia de verdad en el router, con confirmación porque corta la sesión activa si había una).
+- **`agenteMikrotik.js` (servidor interno)**: dos handlers nuevos, `CONSULTAR_PASSWORD_PPPOE` y `CAMBIAR_PASSWORD_PPPOE`. La contraseña real sigue viviendo solo en `secretosPPPoE.json` del servidor — nunca se guarda en el documento principal del servicio, solo se expone puntualmente en un subdocumento (`servicios/{id}/secreto/actual`) cuando alguien la pide.
+- **`firestore.rules`**: ese subdocumento de contraseña solo lo pueden leer roles técnicos (`admin_red`, `operador`, `soporte_tecnico`, `superadmin`) — nunca comercial ni auditoría, y nadie puede escribirlo desde el navegador, solo el agente.
+- **⚠️ Este ZIP toca los dos lados.** Reemplazá `firestore.rules` y `agenteMikrotik.js`, redesplegá las rules, y reiniciá el proceso del agente.
+
+## v1.36 — Razón social y nombre de fantasía para clientes corporativos
+- `modulo-clientes.js`: al elegir tipo de cliente "Corporativo" en el alta, aparecen dos campos nuevos — "Razón social" y "Nombre de fantasía" (opcional). Se muestran también en la ficha del cliente cuando están cargados.
+- Nota: por ahora estos campos solo se cargan al crear el cliente — todavía no hay una pantalla de "editar cliente" para corregirlos después de creado (es un hueco que ya habíamos identificado, pendiente de armar).
+
 ## v1.35 — Restablecer contraseña desde Usuarios y permisos
 - `modulo-usuarios.js`: nuevo botón **"Restablecer contraseña"** por usuario — le manda un correo de restablecimiento vía Firebase Auth (`sendPasswordResetEmail`). No requiere tocar el servidor interno ni que el admin conozca o defina la contraseña nueva; el propio usuario la elige siguiendo el link del correo.
 

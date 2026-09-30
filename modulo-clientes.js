@@ -83,6 +83,7 @@ function FormularioAltaCliente({ usuarioId, onCompletado, onCancelar }) {
   const [form, setForm] = useState({
     codigo: `CLI-${Date.now().toString().slice(-6)}`,
     nombre: '', documento: '', ruc: '', tipoCliente: 'residencial',
+    razonSocial: '', nombreFantasia: '',
     telefono: '', email: '', direccion: '', ciudad: '', zona: '',
   });
   const [enviando, setEnviando] = useState(false);
@@ -104,6 +105,8 @@ function FormularioAltaCliente({ usuarioId, onCompletado, onCancelar }) {
         ...form,
         ruc: form.ruc || null,
         email: form.email || null,
+        razonSocial: form.razonSocial.trim() || null,
+        nombreFantasia: form.nombreFantasia.trim() || null,
         coordenadas: null,
         estadoComercial: 'pendiente',
         ejecutivoResponsable: usuarioId,
@@ -162,6 +165,19 @@ function FormularioAltaCliente({ usuarioId, onCompletado, onCancelar }) {
             </select>
           </div>
         </div>
+
+        ${form.tipoCliente === 'corporativo' && html`
+          <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+            <div class="campo" style=${{ flex: '1 1 260px' }}>
+              <label>Razón social</label>
+              <input type="text" value=${form.razonSocial} onInput=${set('razonSocial')} placeholder="Nombre legal registrado" />
+            </div>
+            <div class="campo" style=${{ flex: '1 1 200px' }}>
+              <label>Nombre de fantasía</label>
+              <input type="text" value=${form.nombreFantasia} onInput=${set('nombreFantasia')} placeholder="Nombre comercial (opcional)" />
+            </div>
+          </div>
+        `}
 
         <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
           <div class="campo" style=${{ flex: '1 1 160px' }}>
@@ -441,6 +457,8 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
       <div class="card" style=${{ marginBottom: '16px' }}>
         <div class="card-titulo">Información general</div>
         <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          ${cliente.razonSocial && html`<${CampoInfo} etiqueta="Razón social" valor=${cliente.razonSocial} />`}
+          ${cliente.nombreFantasia && html`<${CampoInfo} etiqueta="Nombre de fantasía" valor=${cliente.nombreFantasia} />`}
           <${CampoInfo} etiqueta="Documento" valor=${cliente.documento || cliente.ruc} />
           <${CampoInfo} etiqueta="Teléfono" valor=${cliente.telefono} />
           <${CampoInfo} etiqueta="Correo" valor=${cliente.email} />
@@ -598,10 +616,103 @@ function useGruposCorteSimple() {
   return grupos;
 }
 
+function PanelPassword({ servicio, usuarioId }) {
+  const [password, setPassword] = useState(undefined); // undefined = todavía sin pedir
+  const [solicitando, setSolicitando] = useState(false);
+  const [cambiando, setCambiando] = useState(false);
+  const [confirmandoCambio, setConfirmandoCambio] = useState(false);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    const unsub = db.collection('servicios').doc(servicio.id).collection('secreto').doc('actual')
+      .onSnapshot(
+        (doc) => { if (doc.exists) setPassword(doc.data().password); },
+        (err) => console.error(err)
+      );
+    return unsub;
+  }, [servicio.id]);
+
+  const crearOrden = (tipo) => db.collection('ordenes_mikrotik').add({
+    tipo,
+    servicioId: servicio.id,
+    clienteId: servicio.clienteId,
+    routerId: servicio.routerId,
+    parametros: {},
+    estado: 'pendiente',
+    pasosCompletados: [],
+    usuarioSolicitante: usuarioId,
+    fechaSolicitud: firebase.firestore.FieldValue.serverTimestamp(),
+    fechaEjecucion: null,
+    resultado: null,
+    error: null,
+  });
+
+  const pedir = async () => {
+    setSolicitando(true);
+    setError(null);
+    setPassword(null); // "esperando..." mientras el agente responde
+    try {
+      await crearOrden('CONSULTAR_PASSWORD_PPPOE');
+    } catch (err) {
+      setError(err.code === 'permission-denied' ? 'Sin permiso para ver esta contraseña.' : 'No fue posible pedirla.');
+      setPassword(undefined);
+      console.error(err);
+    } finally {
+      setSolicitando(false);
+    }
+  };
+
+  const cambiar = async () => {
+    setCambiando(true);
+    setError(null);
+    try {
+      await crearOrden('CAMBIAR_PASSWORD_PPPOE');
+      setConfirmandoCambio(false);
+      setPassword(null); // "esperando..." hasta que llegue la nueva
+    } catch (err) {
+      setError(err.code === 'permission-denied' ? 'Sin permiso para cambiar esta contraseña.' : 'No fue posible cambiarla.');
+      console.error(err);
+    } finally {
+      setCambiando(false);
+    }
+  };
+
+  return html`
+    <div class="card" style=${{ marginTop: '10px' }}>
+      <p class="texto-secundario" style=${{ marginTop: 0, marginBottom: '10px' }}>
+        Queda registrado quién consulta esta contraseña. Solo la ven roles técnicos.
+      </p>
+
+      ${error && html`<div class="login-error">${error}</div>`}
+
+      ${password === undefined
+        ? html`<button class="btn btn-secundario" onClick=${pedir} disabled=${solicitando}>${solicitando ? 'Pidiendo…' : 'Ver contraseña'}</button>`
+        : password === null
+        ? html`<p class="texto-secundario"><i class="fa-solid fa-spinner fa-spin"></i> Esperando al agente…</p>`
+        : html`<div class="mono" style=${{ fontSize: '1.1em', padding: '8px 12px', background: 'var(--color-fondo)', borderRadius: 'var(--radio-borde)', display: 'inline-block' }}>${password}</div>`}
+
+      <div style=${{ marginTop: '12px' }}>
+        ${confirmandoCambio
+          ? html`
+              <div class="login-error" style=${{ background: 'rgba(217,119,6,0.08)', borderColor: 'rgba(217,119,6,0.25)', color: 'var(--estado-pendiente)' }}>
+                Esto genera una contraseña nueva en el router y corta la sesión activa si había una — el cliente va a necesitar reconfigurar su equipo con la nueva.
+                <div class="flex justify-between" style=${{ marginTop: '8px' }}>
+                  <button class="btn btn-secundario" onClick=${() => setConfirmandoCambio(false)} disabled=${cambiando}>Cancelar</button>
+                  <button class="btn btn-peligro" onClick=${cambiar} disabled=${cambiando}>${cambiando ? 'Cambiando…' : 'Sí, cambiar'}</button>
+                </div>
+              </div>
+            `
+          : html`<button class="btn btn-secundario" onClick=${() => setConfirmandoCambio(true)}>Generar contraseña nueva</button>`}
+      </div>
+    </div>
+  `;
+}
+
 function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
   const [editando, setEditando] = useState(false);
   const [planId, setPlanId] = useState(s.planId);
   const [usuarioPPPoE, setUsuarioPPPoE] = useState(s.usuarioPPPoE ?? '');
+  const [onuSerial, setOnuSerial] = useState(s.onuSerial ?? '');
   const [grupoCorteId, setGrupoCorteId] = useState(s.grupoCorteId ?? '');
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState(null);
@@ -610,6 +721,7 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
   const [cambiandoIP, setCambiandoIP] = useState(false);
   const [ipNueva, setIpNueva] = useState('');
   const [enviandoIP, setEnviandoIP] = useState(false);
+  const [mostrandoPassword, setMostrandoPassword] = useState(false);
   const planesActivos = usePlanesActivos();
   const gruposCorte = useGruposCorteSimple();
 
@@ -717,6 +829,7 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
       const cambiosDirectos = {};
       if (usuarioPPPoE.trim() !== (s.usuarioPPPoE ?? '')) cambiosDirectos.usuarioPPPoE = usuarioPPPoE.trim();
       if (grupoCorteId !== (s.grupoCorteId ?? '')) cambiosDirectos.grupoCorteId = grupoCorteId || null;
+      if (onuSerial.trim() !== (s.onuSerial ?? '')) cambiosDirectos.onuSerial = onuSerial.trim() || null;
 
       if (Object.keys(cambiosDirectos).length > 0) {
         await db.collection('servicios').doc(s.id).update({
@@ -742,7 +855,7 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
             ${s.tipoConexion?.toUpperCase()} — ${nombresPlanes[s.planId] ?? s.planId}
             ${planDesconocido && html`<span class="texto-secundario"> (plan no encontrado — puede haber sido borrado)</span>`}
           </div>
-          <div class="texto-secundario mono">${s.ipAsignadaId ?? 'sin IP asignada'}</div>
+          <div class="texto-secundario mono">${s.ipAsignadaId ?? 'sin IP asignada'}${s.onuSerial ? ` · ONU ${s.onuSerial}` : ''}</div>
         </div>
         <div class="flex items-center gap-8">
           <span class="etiqueta-estado etiqueta-info">${s.estadoTecnico}</span>
@@ -752,6 +865,9 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
             </button>
             <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setCambiandoIP(!cambiandoIP)}>
               ${cambiandoIP ? 'Cerrar' : 'Cambiar IP'}
+            </button>
+            <button class="btn btn-secundario" style=${{ padding: '4px 10px' }} onClick=${() => setMostrandoPassword(!mostrandoPassword)}>
+              ${mostrandoPassword ? 'Cerrar' : 'Contraseña PPPoE'}
             </button>
             <button class="btn btn-peligro" style=${{ padding: '4px 10px' }} onClick=${() => setConfirmandoBaja(true)}>
               Dar de baja
@@ -773,6 +889,8 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
           </div>
         </div>
       `}
+
+      ${mostrandoPassword && html`<${PanelPassword} servicio=${s} usuarioId=${usuarioId} />`}
 
       ${confirmandoBaja && html`
         <div class="card" style=${{ marginTop: '10px', borderColor: 'var(--estado-suspendido)', background: 'rgba(220,38,38,0.05)' }}>
@@ -811,6 +929,10 @@ function FilaServicio({ servicio: s, usuarioId, nombresPlanes }) {
                 <option value="">Sin asignar</option>
                 ${gruposCorte.map((g) => html`<option key=${g.id} value=${g.id}>${g.nombre}</option>`)}
               </select>
+            </div>
+            <div class="campo" style=${{ flex: '1 1 160px', marginBottom: 0 }}>
+              <label>S/N ONU</label>
+              <input type="text" value=${onuSerial} onInput=${(e) => setOnuSerial(e.target.value)} class="mono" />
             </div>
             <button class="btn btn-principal" onClick=${guardar} disabled=${guardando}>${guardando ? 'Guardando…' : 'Guardar'}</button>
           </div>
