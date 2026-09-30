@@ -21,6 +21,92 @@ function formatoMoneda(valor, moneda = 'PYG') {
   return new Intl.NumberFormat('es-PY', { style: 'currency', currency: moneda, maximumFractionDigits: 0 }).format(valor);
 }
 
+function nombreEstadoCuenta(estado) {
+  return ESTADOS_CUENTA[estado]?.etiqueta ?? estado ?? '';
+}
+
+function fechaLegible(timestamp) {
+  return timestamp ? new Date(timestamp.seconds * 1000).toLocaleDateString('es-PY') : '';
+}
+
+function detalleLineas(cuenta) {
+  return (cuenta.lineas ?? [])
+    .map((l) => l.nombreSnapshot ?? l.planNombreSnapshot ?? '')
+    .filter(Boolean);
+}
+
+// ---------------------------------------------------------------------
+// Export del reporte de Cuentas — Excel (SheetJS) y PDF (jsPDF + autotable).
+// Ambas librerías se cargan por <script> en index.html (sin build), y
+// operan enteramente en el navegador: no hay backend/servidor interno
+// involucrado, cada usuario exporta lo que tiene cargado en pantalla.
+// ---------------------------------------------------------------------
+
+function nombreArchivoReporte(extension, periodoFiltro) {
+  const fecha = new Date().toISOString().slice(0, 10);
+  const parte = periodoFiltro || 'todos-los-periodos';
+  return `cuentas_${parte}_${fecha}.${extension}`;
+}
+
+function exportarCuentasExcel(cuentas, nombresClientes, periodoFiltro) {
+  const filas = cuentas.map((c) => ({
+    Cliente: nombresClientes[c.clienteId] ?? c.clienteId,
+    Periodo: c.periodo ?? '',
+    Detalle: detalleLineas(c).join('; '),
+    Moneda: c.moneda ?? 'PYG',
+    Total: c.total ?? 0,
+    Pagado: c.pagado ?? 0,
+    Saldo: c.saldo ?? 0,
+    Vencimiento: fechaLegible(c.fechaVencimiento),
+    Corte: fechaLegible(c.fechaCorte),
+    Estado: nombreEstadoCuenta(c.estado),
+  }));
+
+  const hoja = XLSX.utils.json_to_sheet(filas);
+  hoja['!cols'] = [
+    { wch: 28 }, { wch: 9 }, { wch: 42 }, { wch: 8 },
+    { wch: 14 }, { wch: 14 }, { wch: 14 }, { wch: 12 }, { wch: 12 }, { wch: 14 },
+  ];
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(libro, hoja, 'Cuentas');
+  XLSX.writeFile(libro, nombreArchivoReporte('xlsx', periodoFiltro));
+}
+
+function exportarCuentasPDF(cuentas, nombresClientes, periodoFiltro, estadoFiltro) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'landscape' });
+
+  const subtitulo = `${periodoFiltro || 'Todos los períodos'} — ${estadoFiltro === 'todos' ? 'todos los estados' : nombreEstadoCuenta(estadoFiltro)}`;
+
+  doc.setFontSize(14);
+  doc.text('Vive Telecom — Reporte de Cuentas', 14, 16);
+  doc.setFontSize(9);
+  doc.setTextColor(110);
+  doc.text(`${subtitulo} · Generado ${new Date().toLocaleString('es-PY')} · ${cuentas.length} cuenta${cuentas.length === 1 ? '' : 's'}`, 14, 22);
+
+  const filas = cuentas.map((c) => [
+    nombresClientes[c.clienteId] ?? c.clienteId,
+    c.periodo ?? '',
+    detalleLineas(c).join(', '),
+    formatoMoneda(c.total, c.moneda),
+    formatoMoneda(c.pagado, c.moneda),
+    formatoMoneda(c.saldo, c.moneda),
+    fechaLegible(c.fechaVencimiento),
+    nombreEstadoCuenta(c.estado),
+  ]);
+
+  doc.autoTable({
+    startY: 28,
+    head: [['Cliente', 'Periodo', 'Detalle', 'Total', 'Pagado', 'Saldo', 'Vence', 'Estado']],
+    body: filas,
+    styles: { fontSize: 8, cellPadding: 3, overflow: 'linebreak' },
+    headStyles: { fillColor: [245, 73, 0] },
+    columnStyles: { 2: { cellWidth: 75 } },
+  });
+
+  doc.save(nombreArchivoReporte('pdf', periodoFiltro));
+}
+
 // ---------------------------------------------------------------------
 // Cuentas del cliente
 // ---------------------------------------------------------------------
@@ -575,7 +661,7 @@ function useNombresClientesGlobal() {
   return clientes;
 }
 
-function useCuentasGlobal(estadoFiltro) {
+function useCuentasGlobal(estadoFiltro, periodoFiltro) {
   const [cuentas, setCuentas] = useState([]);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState(null);
@@ -583,10 +669,15 @@ function useCuentasGlobal(estadoFiltro) {
   useEffect(() => {
     setCargando(true);
     setError(null);
-    let ref = db.collection('cuentas').orderBy('fechaEmision', 'desc').limit(100);
-    if (estadoFiltro !== 'todos') {
-      ref = db.collection('cuentas').where('estado', '==', estadoFiltro).orderBy('fechaEmision', 'desc').limit(100);
-    }
+
+    // Sin filtro de período: los 100 más recientes (vista general).
+    // Con período elegido (ej: cierre de mes), el límite sube a 500
+    // porque ahí sí se quiere el universo completo de ese mes, no un
+    // recorte arbitrario de "los últimos".
+    let ref = db.collection('cuentas');
+    if (estadoFiltro !== 'todos') ref = ref.where('estado', '==', estadoFiltro);
+    if (periodoFiltro) ref = ref.where('periodo', '==', periodoFiltro);
+    ref = ref.orderBy('fechaEmision', 'desc').limit(periodoFiltro ? 500 : 100);
 
     const unsub = ref.onSnapshot(
       (snap) => { setCuentas(snap.docs.map((d) => ({ id: d.id, ...d.data() }))); setCargando(false); },
@@ -597,30 +688,68 @@ function useCuentasGlobal(estadoFiltro) {
       }
     );
     return unsub;
-  }, [estadoFiltro]);
+  }, [estadoFiltro, periodoFiltro]);
 
   return { cuentas, cargando, error };
 }
 
 function ModuloCuentasGlobal({ navegarACliente }) {
   const [estadoFiltro, setEstadoFiltro] = useState('todos');
-  const { cuentas, cargando, error } = useCuentasGlobal(estadoFiltro);
+  const [periodoFiltro, setPeriodoFiltro] = useState('');
+  const { cuentas, cargando, error } = useCuentasGlobal(estadoFiltro, periodoFiltro);
   const nombresClientes = useNombresClientesGlobal();
+  const hayDatos = !cargando && cuentas.length > 0;
 
   return html`
     <div>
-      <div class="flex items-center justify-between" style=${{ marginBottom: '16px' }}>
+      <div class="flex items-center justify-between gap-16" style=${{ marginBottom: '16px', flexWrap: 'wrap' }}>
         <h1 style=${{ fontSize: 'var(--texto-titulo-principal)', margin: 0 }}>Cuentas</h1>
-        <select value=${estadoFiltro} onChange=${(e) => setEstadoFiltro(e.target.value)} style=${{ maxWidth: '200px' }}>
-          <option value="todos">Todos los estados</option>
-          <option value="pendiente">Pendiente</option>
-          <option value="parcial">Pago parcial</option>
-          <option value="pagada">Pagada</option>
-          <option value="vencida">Vencida</option>
-          <option value="anulada">Anulada</option>
-          <option value="exonerada">Exonerada</option>
-        </select>
+        <div class="flex items-center gap-8" style=${{ flexWrap: 'wrap' }}>
+          <input
+            type="month"
+            value=${periodoFiltro}
+            onChange=${(e) => setPeriodoFiltro(e.target.value)}
+            title="Filtrar por período (para el cierre de mes)"
+            style=${{ maxWidth: '150px' }}
+          />
+          ${periodoFiltro && html`
+            <button class="btn btn-secundario" onClick=${() => setPeriodoFiltro('')} title="Quitar filtro de período">
+              <i class="fa-solid fa-xmark"></i>
+            </button>
+          `}
+          <select value=${estadoFiltro} onChange=${(e) => setEstadoFiltro(e.target.value)} style=${{ maxWidth: '200px' }}>
+            <option value="todos">Todos los estados</option>
+            <option value="pendiente">Pendiente</option>
+            <option value="parcial">Pago parcial</option>
+            <option value="pagada">Pagada</option>
+            <option value="vencida">Vencida</option>
+            <option value="anulada">Anulada</option>
+            <option value="exonerada">Exonerada</option>
+          </select>
+          <button
+            class="btn btn-secundario"
+            disabled=${!hayDatos}
+            onClick=${() => exportarCuentasExcel(cuentas, nombresClientes, periodoFiltro)}
+            title="Exportar el listado de abajo a Excel"
+          >
+            <i class="fa-solid fa-file-excel"></i> Excel
+          </button>
+          <button
+            class="btn btn-secundario"
+            disabled=${!hayDatos}
+            onClick=${() => exportarCuentasPDF(cuentas, nombresClientes, periodoFiltro, estadoFiltro)}
+            title="Exportar el listado de abajo a PDF"
+          >
+            <i class="fa-solid fa-file-pdf"></i> PDF
+          </button>
+        </div>
       </div>
+
+      ${periodoFiltro && cuentas.length === 500 && html`
+        <div class="login-error" style=${{ marginBottom: '16px', background: 'rgba(217,119,6,0.08)', color: 'var(--estado-pendiente)', borderColor: 'rgba(217,119,6,0.25)' }}>
+          Se alcanzó el límite de 500 cuentas para este período. Si hay más, avisame para subir el límite.
+        </div>
+      `}
 
       ${error && html`<div class="login-error" style=${{ marginBottom: '16px' }}>${error}</div>`}
 

@@ -6,7 +6,7 @@ const { useState, useEffect, useMemo } = React;
 
 // Versión del sistema — se actualiza en cada entrega, coincide con el
 // CHANGELOG.md del repositorio.
-const VERSION_SISTEMA = 'v1.37';
+const VERSION_SISTEMA = 'v1.38';
 
 // Cuenta documentos de una consulta de forma segura. Usa la
 // agregación count() del servidor cuando está disponible (más rápida
