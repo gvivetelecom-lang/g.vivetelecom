@@ -1,5 +1,11 @@
 # CHANGELOG — Sistema Integral de Gestión de Clientes y Red MikroTik (Vive Telecom)
 
+## v1.40
+
+⚠️ Solo toca el lado público. No hay cambios en el servidor interno.
+
+- **Fix: "Monto pendiente de cobro" en el Panel principal mezclaba monedas.** Sumaba el saldo de todas las cuentas pendientes/parciales/vencidas sin distinguir moneda, y lo mostraba siempre formateado en guaraníes — así que una cuenta en USD aparecía sumada como si fueran guaraníes. Ahora se agrupa por moneda: si todo el saldo pendiente está en una sola moneda, se muestra un número con su símbolo correcto (Gs. o US$); si hay saldo pendiente en más de una moneda, se muestran ambos montos apilados en la misma tarjeta.
+
 ## v1.39
 
 ⚠️ Solo toca el lado público. No hay cambios en el servidor interno ni en `firestore.rules` (la regla que permite este cambio ya existía desde antes, simplemente no había botón en la interfaz para usarla).

@@ -46,11 +46,20 @@ function useIndicadoresReales() {
         db.collection('cuentas').where('estado', 'in', ['pendiente', 'parcial', 'vencida']).limit(500).get(),
       ]);
 
-      const montoPendiente = cuentasConSaldo.docs.reduce((sum, d) => sum + (d.data().saldo || 0), 0);
+      // Las cuentas pueden estar en distintas monedas (ej: planes en
+      // USD y planes en PYG) — sumar todo junto y mostrarlo como un
+      // solo número en guaraníes está mal tanto en el valor como en
+      // la etiqueta. Se agrupa por moneda y se muestra cada una aparte.
+      const montoPendientePorMoneda = {};
+      cuentasConSaldo.docs.forEach((d) => {
+        const data = d.data();
+        const moneda = data.moneda || 'PYG';
+        montoPendientePorMoneda[moneda] = (montoPendientePorMoneda[moneda] || 0) + (data.saldo || 0);
+      });
 
       setDatos({
         clientesTotal, clientesActivos, clientesSuspendidos, pendientesInstalacion,
-        cuentasVencidas, montoPendiente, routersOperativos, routersSinRespuesta, ordenesPendientes,
+        cuentasVencidas, montoPendientePorMoneda, routersOperativos, routersSinRespuesta, ordenesPendientes,
       });
       setUltimaActualizacion(new Date());
     } catch (err) {
@@ -70,9 +79,30 @@ function useIndicadoresReales() {
   return { datos, cargando, error, ultimaActualizacion, recargar: cargar };
 }
 
-function formatoMonedaPY(valor) {
+function formatoMonedaPorTipo(valor, moneda) {
   if (valor == null) return '—';
-  return new Intl.NumberFormat('es-PY', { style: 'currency', currency: 'PYG', maximumFractionDigits: 0 }).format(valor);
+  return new Intl.NumberFormat('es-PY', { style: 'currency', currency: moneda || 'PYG', maximumFractionDigits: 0 }).format(valor);
+}
+
+function valorMontoPendiente(montoPendientePorMoneda) {
+  if (montoPendientePorMoneda == null) return null;
+
+  const entradas = Object.entries(montoPendientePorMoneda).filter(([, v]) => v > 0);
+
+  if (entradas.length === 0) return formatoMonedaPorTipo(0, 'PYG');
+
+  if (entradas.length === 1) {
+    const [moneda, valor] = entradas[0];
+    return formatoMonedaPorTipo(valor, moneda);
+  }
+
+  // Más de una moneda con saldo pendiente: se muestran todas apiladas,
+  // en letra más chica para que entren en la tarjeta.
+  return html`
+    <div class="flex flex-col" style=${{ fontSize: '1.15rem', lineHeight: 1.4 }}>
+      ${entradas.map(([moneda, valor]) => html`<span key=${moneda}>${formatoMonedaPorTipo(valor, moneda)}</span>`)}
+    </div>
+  `;
 }
 
 function PanelPrincipalReal({ navegarA }) {
@@ -104,7 +134,7 @@ function PanelPrincipalReal({ navegarA }) {
 
       <div class="grid-indicadores">
         <${TarjetaIndicador} valor=${ind.cuentasVencidas} etiqueta="Cuentas vencidas" onClick=${() => navegarA('cuentas')} />
-        <${TarjetaIndicador} valor=${ind.montoPendiente != null ? formatoMonedaPY(ind.montoPendiente) : null} etiqueta="Monto pendiente de cobro" />
+        <${TarjetaIndicador} valor=${valorMontoPendiente(ind.montoPendientePorMoneda)} etiqueta="Monto pendiente de cobro" />
         <${TarjetaIndicador} valor=${ind.routersOperativos} etiqueta="Routers operativos" onClick=${() => navegarA('routers')} />
         <${TarjetaIndicador} valor=${ind.routersSinRespuesta} etiqueta="Routers sin respuesta" onClick=${() => navegarA('routers')} />
       </div>
