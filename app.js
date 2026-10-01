@@ -6,7 +6,7 @@ const { useState, useEffect, useMemo } = React;
 
 // Versión del sistema — se actualiza en cada entrega, coincide con el
 // CHANGELOG.md del repositorio.
-const VERSION_SISTEMA = 'v1.38';
+const VERSION_SISTEMA = 'v1.39';
 
 // Cuenta documentos de una consulta de forma segura. Usa la
 // agregación count() del servidor cuando está disponible (más rápida
@@ -276,7 +276,7 @@ function AppShell({ usuario, rol }) {
         ${ruta === 'inicio'
           ? html`<${PanelPrincipalReal} navegarA=${setRuta} />`
           : ruta === 'clientes'
-          ? html`<${ModuloClientes} usuarioId=${usuario.uid} clienteInicial=${clienteParaAbrir} />`
+          ? html`<${ModuloClientes} usuarioId=${usuario.uid} rol=${rol} clienteInicial=${clienteParaAbrir} />`
           : ruta === 'servicios'
           ? html`<${ModuloServicios} navegarACliente=${navegarACliente} />`
           : ruta === 'cuentas'

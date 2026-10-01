@@ -534,7 +534,18 @@ function FormularioCrearCuenta({ clienteId, usuarioId, onCompletado, onCancelar 
   `;
 }
 
-function TablaCuentasCliente({ clienteId, usuarioId }) {
+function puedeExonerar(rol) {
+  return rol === 'superadmin' || rol === 'comercial';
+}
+
+async function exonerarCuenta(cuenta, usuarioId, motivo) {
+  await db.collection('cuentas').doc(cuenta.id).update({
+    estado: 'exonerada',
+    observaciones: `Exonerada por ${usuarioId} el ${new Date().toLocaleString('es-PY')}. Motivo: ${motivo}`,
+  });
+}
+
+function TablaCuentasCliente({ clienteId, usuarioId, rol }) {
   const { cuentas, error } = useCuentasCliente(clienteId);
   const [mostrarPago, setMostrarPago] = useState(false);
   const [mostrarNuevaCuenta, setMostrarNuevaCuenta] = useState(false);
@@ -589,10 +600,11 @@ function TablaCuentasCliente({ clienteId, usuarioId }) {
                     <th style=${estiloTh}>Saldo</th>
                     <th style=${estiloTh}>Vencimiento</th>
                     <th style=${estiloTh}>Estado</th>
+                    <th style=${estiloTh}></th>
                   </tr>
                 </thead>
                 <tbody>
-                  ${cuentas.map((c) => html`<${FilaCuenta} key=${c.id} cuenta=${c} />`)}
+                  ${cuentas.map((c) => html`<${FilaCuenta} key=${c.id} cuenta=${c} usuarioId=${usuarioId} rol=${rol} />`)}
                 </tbody>
               </table>
             `}
@@ -601,15 +613,38 @@ function TablaCuentasCliente({ clienteId, usuarioId }) {
   `;
 }
 
-function FilaCuenta({ cuenta: c }) {
+function FilaCuenta({ cuenta: c, usuarioId, rol }) {
   const [expandido, setExpandido] = useState(false);
+  const [mostrarExonerar, setMostrarExonerar] = useState(false);
+  const [motivo, setMotivo] = useState('');
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
   const lineas = c.lineas ?? [];
   const puedeExpandir = lineas.length > 0;
 
+  const estadosExonerables = ['pendiente', 'parcial', 'vencida'];
+  const mostrarBotonExonerar = puedeExonerar(rol) && estadosExonerables.includes(c.estado);
+
+  const confirmarExoneracion = async () => {
+    if (!motivo.trim()) { setError('Ingresá un motivo.'); return; }
+    setEnviando(true);
+    setError(null);
+    try {
+      await exonerarCuenta(c, usuarioId, motivo.trim());
+      setMostrarExonerar(false);
+      setMotivo('');
+    } catch (err) {
+      setError(err.code === 'permission-denied' ? 'Sin permiso para exonerar cuentas.' : 'No fue posible exonerar la cuenta.');
+      console.error(err);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
   return html`
     <${React.Fragment}>
-      <tr style=${{ borderBottom: expandido ? 'none' : '1px solid var(--color-borde)', cursor: puedeExpandir ? 'pointer' : 'default' }} onClick=${() => puedeExpandir && setExpandido(!expandido)}>
-        <td style=${estiloTd}>
+      <tr style=${{ borderBottom: expandido || mostrarExonerar ? 'none' : '1px solid var(--color-borde)' }}>
+        <td style=${{ ...estiloTd, cursor: puedeExpandir ? 'pointer' : 'default' }} onClick=${() => puedeExpandir && setExpandido(!expandido)}>
           <div class="flex items-center gap-8">
             ${puedeExpandir && html`<i class="fa-solid ${expandido ? 'fa-chevron-down' : 'fa-chevron-right'} texto-secundario" style=${{ fontSize: '0.7em' }}></i>`}
             <span>${c.periodo}</span>
@@ -623,16 +658,46 @@ function FilaCuenta({ cuenta: c }) {
           ${c.fechaVencimiento ? new Date(c.fechaVencimiento.seconds * 1000).toLocaleDateString('es-PY') : '—'}
         </td>
         <td style=${estiloTd}><${EtiquetaEstadoCuenta} estado=${c.estado} /></td>
+        <td style=${estiloTd}>
+          ${mostrarBotonExonerar && html`
+            <button class="btn btn-secundario" style=${{ padding: '4px 10px', fontSize: 'var(--texto-etiqueta)' }} onClick=${() => setMostrarExonerar(!mostrarExonerar)}>
+              Exonerar
+            </button>
+          `}
+        </td>
       </tr>
       ${expandido && html`
         <tr style=${{ borderBottom: '1px solid var(--color-borde)' }}>
-          <td colspan="6" style=${{ padding: '0 16px 12px 40px', background: 'var(--color-fondo)' }}>
+          <td colspan="7" style=${{ padding: '0 16px 12px 40px', background: 'var(--color-fondo)' }}>
             ${lineas.map((l) => html`
               <div key=${l.referenciaId ?? l.servicioId} class="flex items-center justify-between" style=${{ padding: '4px 0' }}>
                 <span class="texto-secundario">${l.nombreSnapshot ?? l.planNombreSnapshot}</span>
                 <span class="mono texto-secundario">${formatoMoneda(l.importeSnapshot, c.moneda)}</span>
               </div>
             `)}
+          </td>
+        </tr>
+      `}
+      ${mostrarExonerar && html`
+        <tr style=${{ borderBottom: '1px solid var(--color-borde)' }}>
+          <td colspan="7" style=${{ padding: '12px 16px', background: 'var(--color-fondo)' }}>
+            <div class="flex items-center gap-8" style=${{ flexWrap: 'wrap' }}>
+              <span class="texto-secundario" style=${{ flex: '0 0 auto' }}>
+                Exonerar el período <strong>${c.periodo}</strong> (saldo ${formatoMoneda(c.saldo, c.moneda)}). Esto anula el cobro pero deja el registro visible en el historial.
+              </span>
+            </div>
+            <div class="flex items-center gap-8" style=${{ marginTop: '8px', flexWrap: 'wrap' }}>
+              <input
+                type="text"
+                placeholder="Motivo (obligatorio)"
+                value=${motivo}
+                onInput=${(e) => setMotivo(e.target.value)}
+                style=${{ flex: '1 1 260px' }}
+              />
+              <button class="btn btn-secundario" onClick=${() => { setMostrarExonerar(false); setMotivo(''); setError(null); }} disabled=${enviando}>Cancelar</button>
+              <button class="btn btn-peligro" onClick=${confirmarExoneracion} disabled=${enviando}>${enviando ? 'Exonerando…' : 'Confirmar exoneración'}</button>
+            </div>
+            ${error && html`<div class="login-error" style=${{ marginTop: '8px' }}>${error}</div>`}
           </td>
         </tr>
       `}

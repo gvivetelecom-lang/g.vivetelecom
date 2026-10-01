@@ -340,7 +340,7 @@ function inconsistenciaFinancieroTecnico(cliente, servicios) {
   return suspendidoComercial && algunServicioConectado;
 }
 
-function FichaCliente({ clienteId, volver, usuarioId }) {
+function FichaCliente({ clienteId, volver, usuarioId, rol }) {
   const { cliente, servicios } = useCliente(clienteId);
   const { planes: nombresPlanes, routers: nombresRouters } = useNombresPlanesYRouters();
   const [mostrarAlta, setMostrarAlta] = useState(false);
@@ -490,7 +490,7 @@ function FichaCliente({ clienteId, volver, usuarioId }) {
       `}
 
       <div style=${{ marginBottom: '16px' }}>
-        <${TablaCuentasCliente} clienteId=${clienteId} usuarioId=${usuarioId} />
+        <${TablaCuentasCliente} clienteId=${clienteId} usuarioId=${usuarioId} rol=${rol} />
       </div>
 
       <${TarjetaServiciosAdicionales} clienteId=${clienteId} usuarioId=${usuarioId} />
@@ -957,7 +957,7 @@ function CampoInfo({ etiqueta, valor }) {
 // Contenedor del módulo: alterna entre tabla y ficha
 // ---------------------------------------------------------------------
 
-function ModuloClientes({ usuarioId, clienteInicial }) {
+function ModuloClientes({ usuarioId, rol, clienteInicial }) {
   const [clienteSeleccionado, setClienteSeleccionado] = useState(clienteInicial ?? null);
 
   useEffect(() => {
@@ -965,7 +965,7 @@ function ModuloClientes({ usuarioId, clienteInicial }) {
   }, [clienteInicial]);
 
   if (clienteSeleccionado) {
-    return html`<${FichaCliente} clienteId=${clienteSeleccionado} volver=${() => setClienteSeleccionado(null)} usuarioId=${usuarioId} />`;
+    return html`<${FichaCliente} clienteId=${clienteSeleccionado} volver=${() => setClienteSeleccionado(null)} usuarioId=${usuarioId} rol=${rol} />`;
   }
 
   return html`<${TablaClientes} onSeleccionar=${setClienteSeleccionado} usuarioId=${usuarioId} />`;

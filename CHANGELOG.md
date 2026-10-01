@@ -1,5 +1,13 @@
 # CHANGELOG — Sistema Integral de Gestión de Clientes y Red MikroTik (Vive Telecom)
 
+## v1.39
+
+⚠️ Solo toca el lado público. No hay cambios en el servidor interno ni en `firestore.rules` (la regla que permite este cambio ya existía desde antes, simplemente no había botón en la interfaz para usarla).
+
+- **Exonerar una cuenta**: en la ficha del cliente, tabla de Cuentas, las cuentas en estado pendiente/parcial/vencida ahora tienen un botón "Exonerar". Pide un motivo obligatorio y, al confirmar, cambia el estado de la cuenta a "Exonerada" y guarda quién y cuándo la exoneró (y el motivo) en las observaciones de la cuenta.
+- Solo visible para roles **comercial** y **superadmin** (mismo criterio que ya aplicaba en las reglas para quién puede tocar el estado de una cuenta).
+- Bump de versión a v1.39.
+
 ## v1.38
 
 ⚠️ Solo toca el lado público (repositorio-github-publico). No hay cambios en el servidor interno — no hace falta redesplegar reglas ni reiniciar el agente.
