@@ -340,9 +340,181 @@ function inconsistenciaFinancieroTecnico(cliente, servicios) {
   return suspendidoComercial && algunServicioConectado;
 }
 
+// Las reglas de Firestore permiten modificar datos del cliente solo al
+// acceso técnico (superadmin, admin_red, operador). Comercial solo puede
+// tocar estado, observaciones y ejecutivo, así que no ve el botón.
+function puedeEditarCliente(rol) {
+  return rol === 'superadmin' || rol === 'admin_red' || rol === 'operador';
+}
+
+function FormularioEditarCliente({ cliente, usuarioId, onCancelar, onCompletado }) {
+  const [form, setForm] = useState({
+    nombre: cliente.nombre ?? '',
+    documento: cliente.documento ?? '',
+    ruc: cliente.ruc ?? '',
+    tipoCliente: cliente.tipoCliente ?? 'residencial',
+    razonSocial: cliente.razonSocial ?? '',
+    nombreFantasia: cliente.nombreFantasia ?? '',
+    telefono: cliente.telefono ?? '',
+    email: cliente.email ?? '',
+    direccion: cliente.direccion ?? '',
+    ciudad: cliente.ciudad ?? '',
+    zona: cliente.zona ?? '',
+    observaciones: cliente.observaciones ?? '',
+  });
+  const [enviando, setEnviando] = useState(false);
+  const [error, setError] = useState(null);
+
+  const set = (campo) => (e) => setForm((f) => ({ ...f, [campo]: e.target.value }));
+
+  const guardar = async (e) => {
+    e.preventDefault();
+    if (!form.nombre.trim() || !form.documento.trim()) {
+      setError('Nombre y documento son obligatorios.');
+      return;
+    }
+
+    const nuevos = {
+      nombre: form.nombre.trim(),
+      documento: form.documento.trim(),
+      ruc: form.ruc.trim() || null,
+      tipoCliente: form.tipoCliente,
+      telefono: form.telefono.trim(),
+      email: form.email.trim() || null,
+      direccion: form.direccion.trim(),
+      ciudad: form.ciudad.trim(),
+      zona: form.zona.trim(),
+      observaciones: form.observaciones.trim(),
+    };
+    // Razón social / fantasía solo se tocan si el cliente es corporativo,
+    // para no borrar datos por un cambio de tipo hecho por error.
+    if (form.tipoCliente === 'corporativo') {
+      nuevos.razonSocial = form.razonSocial.trim() || null;
+      nuevos.nombreFantasia = form.nombreFantasia.trim() || null;
+    }
+
+    // Se envían solo los campos que cambiaron (null, undefined y '' cuentan igual).
+    const cambios = {};
+    Object.entries(nuevos).forEach(([campo, valor]) => {
+      if ((cliente[campo] ?? '') !== (valor ?? '')) cambios[campo] = valor;
+    });
+
+    if (Object.keys(cambios).length === 0) {
+      setError('No hay cambios para guardar.');
+      return;
+    }
+
+    setEnviando(true);
+    setError(null);
+    try {
+      await db.collection('clientes').doc(cliente.id).update({
+        ...cambios,
+        ultimaModificacion: { usuarioId, fecha: firebase.firestore.FieldValue.serverTimestamp() },
+      });
+      onCompletado();
+    } catch (err) {
+      setError(
+        err.code === 'permission-denied'
+          ? 'Tu rol no tiene permiso para modificar los datos del cliente.'
+          : 'No fue posible guardar los cambios. Intente nuevamente.'
+      );
+      console.error(err);
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return html`
+    <div class="card" style=${{ maxWidth: '620px', marginBottom: '16px' }}>
+      <div class="card-titulo">Editar datos del cliente</div>
+
+      ${error && html`<div class="login-error">${error}</div>`}
+
+      <form onSubmit=${guardar}>
+        <div class="campo">
+          <label>Nombre completo</label>
+          <input type="text" value=${form.nombre} onInput=${set('nombre')} required />
+        </div>
+
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Documento</label>
+            <input type="text" value=${form.documento} onInput=${set('documento')} required />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>RUC (opcional)</label>
+            <input type="text" value=${form.ruc} onInput=${set('ruc')} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Tipo de cliente</label>
+            <select value=${form.tipoCliente} onChange=${set('tipoCliente')}>
+              <option value="residencial">Residencial</option>
+              <option value="corporativo">Corporativo</option>
+              <option value="otro">Otro</option>
+            </select>
+          </div>
+        </div>
+
+        ${form.tipoCliente === 'corporativo' && html`
+          <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+            <div class="campo" style=${{ flex: '1 1 260px' }}>
+              <label>Razón social</label>
+              <input type="text" value=${form.razonSocial} onInput=${set('razonSocial')} placeholder="Nombre legal registrado" />
+            </div>
+            <div class="campo" style=${{ flex: '1 1 200px' }}>
+              <label>Nombre de fantasía</label>
+              <input type="text" value=${form.nombreFantasia} onInput=${set('nombreFantasia')} placeholder="Nombre comercial (opcional)" />
+            </div>
+          </div>
+        `}
+
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Teléfono</label>
+            <input type="tel" value=${form.telefono} onInput=${set('telefono')} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 200px' }}>
+            <label>Correo (opcional)</label>
+            <input type="email" value=${form.email} onInput=${set('email')} />
+          </div>
+        </div>
+
+        <div class="campo">
+          <label>Dirección</label>
+          <input type="text" value=${form.direccion} onInput=${set('direccion')} />
+        </div>
+
+        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Ciudad</label>
+            <input type="text" value=${form.ciudad} onInput=${set('ciudad')} />
+          </div>
+          <div class="campo" style=${{ flex: '1 1 160px' }}>
+            <label>Zona</label>
+            <input type="text" value=${form.zona} onInput=${set('zona')} />
+          </div>
+        </div>
+
+        <div class="campo">
+          <label>Observaciones</label>
+          <textarea rows="3" value=${form.observaciones} onInput=${set('observaciones')}></textarea>
+        </div>
+
+        <div class="flex justify-between">
+          <button type="button" class="btn btn-secundario" onClick=${onCancelar} disabled=${enviando}>Cancelar</button>
+          <button type="submit" class="btn btn-principal" disabled=${enviando}>
+            ${enviando ? 'Guardando…' : 'Guardar cambios'}
+          </button>
+        </div>
+      </form>
+    </div>
+  `;
+}
+
 function FichaCliente({ clienteId, volver, usuarioId, rol }) {
   const { cliente, servicios } = useCliente(clienteId);
   const { planes: nombresPlanes, routers: nombresRouters } = useNombresPlanesYRouters();
+  const [editando, setEditando] = useState(false);
   const [mostrarAlta, setMostrarAlta] = useState(false);
   const [accionEnCurso, setAccionEnCurso] = useState(null);
   const [errorAccion, setErrorAccion] = useState(null);
@@ -452,20 +624,36 @@ function FichaCliente({ clienteId, volver, usuarioId, rol }) {
           <i class="fa-solid fa-check"></i> ${accionEnCurso === 'rehabilitar' ? 'Rehabilitando…' : 'Rehabilitar'}
         </button>
         <button class="btn btn-secundario" disabled title="Próximamente"><i class="fa-solid fa-clock-rotate-left"></i> Ver historial</button>
+        ${puedeEditarCliente(rol) && html`
+          <button class="btn btn-secundario" onClick=${() => setEditando(true)} disabled=${editando}>
+            <i class="fa-solid fa-pen"></i> Editar datos
+          </button>
+        `}
       </div>
 
-      <div class="card" style=${{ marginBottom: '16px' }}>
-        <div class="card-titulo">Información general</div>
-        <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
-          ${cliente.razonSocial && html`<${CampoInfo} etiqueta="Razón social" valor=${cliente.razonSocial} />`}
-          ${cliente.nombreFantasia && html`<${CampoInfo} etiqueta="Nombre de fantasía" valor=${cliente.nombreFantasia} />`}
-          <${CampoInfo} etiqueta="Documento" valor=${cliente.documento || cliente.ruc} />
-          <${CampoInfo} etiqueta="Teléfono" valor=${cliente.telefono} />
-          <${CampoInfo} etiqueta="Correo" valor=${cliente.email} />
-          <${CampoInfo} etiqueta="Dirección" valor=${cliente.direccion} />
-          <${CampoInfo} etiqueta="Ciudad / Zona" valor=${`${cliente.ciudad ?? ''} ${cliente.zona ? '/ ' + cliente.zona : ''}`} />
-        </div>
-      </div>
+      ${editando
+        ? html`
+            <${FormularioEditarCliente}
+              cliente=${cliente}
+              usuarioId=${usuarioId}
+              onCancelar=${() => setEditando(false)}
+              onCompletado=${() => setEditando(false)}
+            />
+          `
+        : html`
+            <div class="card" style=${{ marginBottom: '16px' }}>
+              <div class="card-titulo">Información general</div>
+              <div class="flex gap-16" style=${{ flexWrap: 'wrap' }}>
+                ${cliente.razonSocial && html`<${CampoInfo} etiqueta="Razón social" valor=${cliente.razonSocial} />`}
+                ${cliente.nombreFantasia && html`<${CampoInfo} etiqueta="Nombre de fantasía" valor=${cliente.nombreFantasia} />`}
+                <${CampoInfo} etiqueta="Documento" valor=${cliente.documento || cliente.ruc} />
+                <${CampoInfo} etiqueta="Teléfono" valor=${cliente.telefono} />
+                <${CampoInfo} etiqueta="Correo" valor=${cliente.email} />
+                <${CampoInfo} etiqueta="Dirección" valor=${cliente.direccion} />
+                <${CampoInfo} etiqueta="Ciudad / Zona" valor=${`${cliente.ciudad ?? ''} ${cliente.zona ? '/ ' + cliente.zona : ''}`} />
+              </div>
+            </div>
+          `}
 
       <div class="card" style=${{ marginBottom: '16px' }}>
         <div class="card-titulo">Estado</div>

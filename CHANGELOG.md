@@ -1,5 +1,12 @@
 # CHANGELOG — Sistema Integral de Gestión de Clientes y Red MikroTik (Vive Telecom)
 
+## v1.41
+
+⚠️ Solo toca el lado público. No hay cambios en el servidor interno ni en `firestore.rules`.
+
+- **Editar datos del cliente.** En la ficha del cliente hay un nuevo botón "Editar datos" que abre un formulario con nombre, documento, RUC, tipo de cliente, razón social / nombre de fantasía (solo si es corporativo), teléfono, correo, dirección, ciudad, zona y observaciones. Solo se guardan los campos que cambiaron, y queda registrado quién y cuándo hizo la modificación (el módulo de auditoría la registra como cualquier otro cambio).
+- Visible para superadmin, admin_red y operador (los roles que las reglas ya autorizan a modificar clientes). El código del cliente no se edita.
+
 ## v1.40
 
 ⚠️ Solo toca el lado público. No hay cambios en el servidor interno.
