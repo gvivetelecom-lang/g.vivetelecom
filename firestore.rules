@@ -1,0 +1,266 @@
+rules_version = '2';
+
+/**
+ * firestore.rules
+ *
+ * La seguridad REAL del sistema vive acá, no en el frontend.
+ * permissions.js solo oculta/muestra controles por experiencia de
+ * usuario; nunca sustituye estas reglas (sección 16 de la especificación).
+ *
+ * No se aceptan reglas abiertas del tipo `allow read, write: if true`.
+ */
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    /* ---------------------------------------------------------- */
+    /* Funciones auxiliares                                        */
+    /* ---------------------------------------------------------- */
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function userDoc() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function userRole() {
+      return isSignedIn() ? userDoc().rol : null;
+    }
+
+    function userActivo() {
+      return isSignedIn() && userDoc().activo != false;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && userActivo() && userRole() == 'admin';
+    }
+
+    function hasRole(roles) {
+      return isSignedIn() && userActivo() && (userRole() in roles);
+    }
+
+    /* ---------------------------------------------------------- */
+    /* usuarios/{uid} — perfil de aplicación, separado de Auth      */
+    /* ---------------------------------------------------------- */
+
+    match /configuracion/{docId} {
+      // Lectura pública a propósito: acá solo vive el nombre de la
+      // empresa y el logo, que hay que poder mostrar en la pantalla de
+      // login ANTES de que la persona se autentique. No hay datos
+      // sensibles en esta colección.
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /sucursales/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if hasRole(['admin', 'gerencia']);
+      allow delete: if false; // baja lógica (activo:false), nunca borrado físico
+    }
+
+    match /usuarios/{uid} {
+      allow read: if isSignedIn();
+      // El módulo de Seguridad crea el documento del usuario nuevo
+      // usando la sesión del admin (ver crearUsuarioConAuth en app.js);
+      // por eso esta regla evalúa el rol de quien está autenticado, no
+      // el UID del documento que se está creando.
+      allow create: if isAdmin();
+      // Un usuario puede actualizar campos no sensibles de su propio
+      // perfil; solo un admin puede cambiar el rol o el estado activo.
+      allow update: if isAdmin() ||
+        (isSignedIn() && request.auth.uid == uid &&
+         request.resource.data.rol == resource.data.rol &&
+         request.resource.data.activo == resource.data.activo);
+      allow delete: if false; // baja lógica con activo:false, nunca borrado físico
+    }
+
+    /* ---------------------------------------------------------- */
+    /* Colecciones catálogo (maestros) — sección 15.1               */
+    /* CRUD habilitado para roles con acceso al módulo Stock.       */
+    /* ---------------------------------------------------------- */
+
+    match /marcas/{docId} {
+      allow read: if isSignedIn();
+      allow create, update: if hasRole(['admin', 'gerencia', 'compras', 'deposito']);
+      allow delete: if false; // baja lógica (activo:false), nunca borrado físico
+    }
+
+    // Réplica del mismo patrón para el resto de los maestros de Stock
+    // (lineas, categorias, colores, tallas, depositos, etc.) a medida
+    // que se implementen sus páginas en app.js.
+    match /lineas/{docId}       { allow read: if isSignedIn(); allow create, update: if hasRole(['admin','gerencia','compras','deposito']); allow delete: if false; }
+    match /categorias/{docId}   { allow read: if isSignedIn(); allow create, update: if hasRole(['admin','gerencia','compras','deposito']); allow delete: if false; }
+    match /depositos/{docId}    { allow read: if isSignedIn(); allow create, update: if hasRole(['admin','gerencia']); allow delete: if false; }
+    match /productos/{docId} {
+      allow read: if isSignedIn();
+      allow create: if hasRole(['admin','gerencia','compras','deposito']);
+      // Caja y vendedores solo pueden tocar el stock (lo descuenta una venta);
+      // cualquier otro campo del producto queda reservado a los demás roles.
+      allow update: if hasRole(['admin','gerencia','compras','deposito']) ||
+        (hasRole(['cajero','vendedor']) &&
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['stockPorDeposito','stockTotal','actualizadoEn']));
+      allow delete: if false;
+    }
+    match /proveedores/{docId}  { allow read: if hasRole(['admin','gerencia','compras','finanzas','deposito']); allow create, update: if hasRole(['admin','gerencia','compras']); allow delete: if false; }
+    match /clientes/{docId}     { allow read: if isSignedIn(); allow create, update: if hasRole(['admin','gerencia','cajero','vendedor','finanzas']); allow delete: if false; }
+
+    /* ---------------------------------------------------------- */
+    /* Colecciones transaccionales inmutables — sección 15.2        */
+    /* Movimientos de stock, ventas, documentos: se crean, nunca se */
+    /* editan ni borran. Las correcciones son movimientos inversos. */
+    /* ---------------------------------------------------------- */
+
+    match /movimientosStock/{docId} {
+      allow read: if hasRole(['admin', 'gerencia', 'deposito', 'compras']);
+      allow create: if hasRole(['admin', 'gerencia', 'deposito', 'compras']) ||
+        (hasRole(['cajero', 'vendedor']) && request.resource.data.tipo == 'egreso'); // egreso por venta
+      allow update, delete: if false;
+    }
+
+    match /salidasProductos/{docId} {
+      // Salida de mercadería sin venta (obsequios y probadores). Inmutable:
+      // solo admin/gerencia pueden anularla (una vez), cambiando únicamente
+      // los campos propios de la anulación.
+      allow read: if hasRole(['admin', 'gerencia', 'deposito', 'compras', 'vendedor', 'cajero']);
+      allow create: if hasRole(['admin', 'gerencia', 'deposito', 'vendedor', 'cajero']);
+      allow update: if hasRole(['admin', 'gerencia']) &&
+        resource.data.estado == 'emitida' &&
+        request.resource.data.estado == 'anulada' &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['estado', 'motivoAnulacion', 'anuladaPorId', 'anuladaPorNombre', 'anuladaEn']);
+      allow delete: if false;
+    }
+
+    match /ordenesCompra/{docId} {
+      // Pedido al proveedor. Se puede actualizar (estado y cantidades
+      // recibidas, por una recepción o una anulación) pero nunca borrar.
+      allow read: if hasRole(['admin', 'gerencia', 'compras', 'deposito', 'finanzas']);
+      allow create: if hasRole(['admin', 'gerencia', 'compras']);
+      allow update: if hasRole(['admin', 'gerencia', 'compras', 'deposito']);
+      allow delete: if false;
+    }
+
+    match /recepciones/{docId} {
+      // Recepción de mercadería contra factura del proveedor. Inmutable:
+      // una corrección se registra como movimiento inverso, no se edita.
+      allow read: if hasRole(['admin', 'gerencia', 'deposito', 'compras', 'finanzas']);
+      allow create: if hasRole(['admin', 'gerencia', 'deposito', 'compras']);
+      // Un pago a proveedor solo puede reducir el saldo pendiente de la factura.
+      allow update: if hasRole(['admin', 'gerencia', 'finanzas']) &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['saldoPendiente', 'actualizadoEn']) &&
+        request.resource.data.saldoPendiente >= 0 &&
+        request.resource.data.saldoPendiente < resource.data.saldoPendiente;
+      allow delete: if false;
+    }
+
+    match /pagosProveedores/{docId} {
+      // Pago a proveedores. Inmutable (una corrección sería un movimiento inverso).
+      allow read: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow create: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow update, delete: if false;
+    }
+
+    match /remisiones/{docId} {
+      // Nota de remisión de un traslado de mercadería entre depósitos.
+      // Igual que movimientosStock: se crea una vez y nunca se edita ni
+      // se borra (una corrección se hace con otra remisión inversa).
+      allow read: if hasRole(['admin', 'gerencia', 'deposito', 'compras']);
+      allow create: if hasRole(['admin', 'gerencia', 'deposito']);
+      allow update, delete: if false;
+    }
+
+    match /ventas/{docId} {
+      allow read: if hasRole(['admin', 'gerencia', 'cajero', 'vendedor', 'finanzas']);
+      allow create: if hasRole(['admin', 'gerencia', 'cajero', 'vendedor']);
+      // La venta no se edita; solo admin/gerencia pueden anularla (una vez),
+      // y únicamente cambian los campos propios de la anulación.
+      allow update: if hasRole(['admin', 'gerencia']) &&
+        resource.data.estado == 'emitida' &&
+        request.resource.data.estado == 'anulada' &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['estado', 'saldoPendiente', 'cobradoAlAnular', 'motivoAnulacion', 'anuladaPorId', 'anuladaPorNombre', 'anuladaEn']);
+      // Cobro de una venta a crédito: solo puede bajar el saldo pendiente.
+      allow update: if hasRole(['admin', 'gerencia', 'finanzas']) &&
+        resource.data.estado == 'emitida' &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['saldoPendiente', 'actualizadoEn']) &&
+        request.resource.data.saldoPendiente >= 0 &&
+        request.resource.data.saldoPendiente < resource.data.saldoPendiente;
+      allow delete: if false;
+    }
+
+    match /cobros/{docId} {
+      // Cobro de ventas a crédito. Inmutable: una corrección sería un
+      // movimiento inverso, no una edición.
+      allow read: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow create: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow update, delete: if false;
+    }
+
+    /* ---------------------------------------------------------- */
+    /* Bancos (v0.19.0)                                             */
+    /* ---------------------------------------------------------- */
+
+    match /cuentasBancarias/{docId} {
+      // El saldo lo actualizan las transacciones de cobros/pagos/movimientos
+      // (mismos roles). Las cuentas nunca se borran: se desactivan.
+      allow read: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow create, update: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow delete: if false;
+    }
+
+    match /movimientosBancarios/{docId} {
+      // Inmutable salvo la marca de conciliación (solo admin/finanzas).
+      allow read: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow create: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow update: if hasRole(['admin', 'finanzas']) &&
+        request.resource.data.diff(resource.data).affectedKeys()
+          .hasOnly(['conciliado', 'conciliadoEn', 'conciliadoPorId', 'conciliadoPorNombre']);
+      allow delete: if false;
+    }
+
+    match /movimientosFinancieros/{docId} {
+      allow read: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow create: if hasRole(['admin', 'gerencia', 'finanzas']);
+      allow update, delete: if false;
+    }
+
+    /* ---------------------------------------------------------- */
+    /* Contadores atómicos — sección 15.5                           */
+    /* ---------------------------------------------------------- */
+
+    match /contadores/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn(); // se incrementa dentro de runTransaction junto al documento que numera
+    }
+
+    /* ---------------------------------------------------------- */
+    /* Auditoría — solo lectura para admin/gerencia, escritura      */
+    /* exclusiva del backend lógico de la app (nunca editable).     */
+    /* ---------------------------------------------------------- */
+
+    match /auditoria/{docId} {
+      allow read: if hasRole(['admin', 'gerencia']);
+      allow create: if isSignedIn();
+      allow update, delete: if false;
+    }
+
+    /* ---------------------------------------------------------- */
+    /* Módulos aún no activados (Online, Contabilidad, Facturación  */
+    /* electrónica): solo lectura de admin mientras se modela.      */
+    /* ---------------------------------------------------------- */
+
+    match /pedidosOnline/{docId}     { allow read: if isAdmin(); allow write: if false; }
+    match /cuentasContables/{docId}  { allow read: if isAdmin(); allow write: if false; }
+    match /comprobantesFiscales/{docId} { allow read: if isAdmin(); allow write: if false; }
+
+    /* ---------------------------------------------------------- */
+    /* Por defecto: denegar todo lo no listado explícitamente.      */
+    /* ---------------------------------------------------------- */
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
